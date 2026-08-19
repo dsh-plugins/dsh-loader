@@ -11,11 +11,17 @@ import { join, resolve } from 'node:path';
 import { AdapterRegistry, detectDshVersion, UnsupportedDshVersionError } from './registry.js';
 import { registerHostAdapters } from './adapters/index.js';
 import { createHostAPI } from './api.js';
+import type { CordisContext, AdapterFactory, HostAdapterConfig } from './types.js';
 
 export const name = '@dsh-plugin/dsh-loader';
 // dshloader itself depends on `webServer` so its fiber only activates once
 // the real web server is provided — the alias then points `httpServer` at it.
 export const inject = ['webServer'];
+
+interface LoaderConfig {
+  exposeAllNamespaces: boolean;
+  hostPackageAliases?: Record<string, string>;
+}
 
 /**
  * Read the profile-level dshloader config (exposeAllNamespaces etc.).
@@ -24,13 +30,16 @@ export const inject = ['webServer'];
  *   2. profile package.json `dsh.dshloader.exposeAllNamespaces`
  *   3. profile package.json `dshLoader.settings.exposeAllNamespaces`
  */
-export function readLoaderConfig({ profileDir } = {}) {
+export function readLoaderConfig(opts: { profileDir?: string } = {}): LoaderConfig {
   const envOn = process.env.DSHLOADER_EXPOSE_ALL_SETTINGS === '1' || process.env.DSHLOADER_EXPOSE_ALL_SETTINGS === 'true';
   let pkgOn = false;
   try {
     // Best-effort: read the profile manifest if reachable via cwd.
-    const dir = profileDir ?? join(process.env.DSH_HOME ?? '', 'profiles', 'web');
-    const manifest = JSON.parse(readFileSync(join(resolve(dir), 'package.json'), 'utf8'));
+    const dir = opts.profileDir ?? join(process.env.DSH_HOME ?? '', 'profiles', 'web');
+    const manifest = JSON.parse(readFileSync(join(resolve(dir), 'package.json'), 'utf8')) as {
+      dsh?: { dshloader?: { exposeAllNamespaces?: boolean } };
+      dshLoader?: { settings?: { exposeAllNamespaces?: boolean } };
+    };
     pkgOn = Boolean(
       manifest.dsh?.dshloader?.exposeAllNamespaces ??
         manifest.dshLoader?.settings?.exposeAllNamespaces,
@@ -41,13 +50,23 @@ export function readLoaderConfig({ profileDir } = {}) {
   return { exposeAllNamespaces: envOn || pkgOn };
 }
 
+interface AdapterSelectionResult {
+  registry: AdapterRegistry;
+  factory: AdapterFactory;
+  mode: 'exact' | 'range' | 'fallback';
+  dshVersion: string;
+}
+
 /**
  * Build the registry + select an adapter for the current dsh version, without
  * touching the cordis context. Exported for tests and the `info` CLI command.
  */
-export function selectAdapter({ dshVersion, registry } = {}) {
-  const reg = registry ?? registerHostAdapters(new AdapterRegistry());
-  const version = dshVersion ?? detectDshVersion();
+export function selectAdapter(opts: {
+  dshVersion?: string;
+  registry?: AdapterRegistry;
+} = {}): AdapterSelectionResult {
+  const reg = opts.registry ?? registerHostAdapters(new AdapterRegistry());
+  const version = opts.dshVersion ?? detectDshVersion();
   if (version === undefined) {
     throw new UnsupportedDshVersionError(
       `${LOG_PREFIX} could not detect dsh version; set DSHLOADER_DSH_VERSION or install @deepseek-ai/dsh`,
@@ -60,16 +79,18 @@ export function selectAdapter({ dshVersion, registry } = {}) {
 
 /**
  * Apply the selected adapter onto a cordis context and expose the stable API.
- * @param {object} ctx cordis context
- * @param {{ dshVersion?: string, config?: object, registry?: AdapterRegistry }} [opts]
- * @returns {Promise<{ api: object, factory: object, mode: string, dshVersion: string }>}
+ * @param ctx cordis context
+ * @returns
  */
-export async function applyAdapter(ctx, opts = {}) {
+export async function applyAdapter(
+  ctx: CordisContext,
+  opts: { dshVersion?: string; config?: LoaderConfig; registry?: AdapterRegistry } = {},
+): Promise<{ api: ReturnType<typeof createHostAPI>; factory: AdapterFactory; mode: string; dshVersion: string }> {
   const config = opts.config ?? readLoaderConfig();
   const selection = selectAdapter({ dshVersion: opts.dshVersion, registry: opts.registry });
   const { factory, mode, dshVersion } = selection;
 
-  const adapter = factory.create(ctx, config);
+  const adapter = factory.create(ctx, config as HostAdapterConfig);
   await adapter.apply?.();
 
   const api = createHostAPI({
@@ -94,7 +115,7 @@ export async function applyAdapter(ctx, opts = {}) {
 }
 
 /** cordis function-plugin entry point. */
-export async function apply(ctx) {
+export async function apply(ctx: CordisContext): Promise<void> {
   if (process.env.DSHLOADER_DISABLE === '1' || process.env.DSHLOADER_DISABLE === 'true') {
     console.log(`${LOG_PREFIX} disabled by env, skipping`);
     return;

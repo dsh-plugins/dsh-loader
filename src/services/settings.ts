@@ -10,8 +10,9 @@
 // plugin code is already trusted (it runs in the dsh Node process and could
 // call ctx.get('settings').update directly). The whitelist is a browser-side
 // default-deny boundary owned by dsh-host-apiproxy; the browser path is
-// covered separately by the client fetch interceptor (src/client.js).
+// covered separately by the client fetch interceptor (src/client.ts).
 import { LOG_PREFIX } from '../version.js';
+import type { CordisContext, SettingsAPI, SettingsResult, NamespaceView } from '../types.js';
 
 /**
  * Official browser-writable settings namespaces (dsh-host-apiproxy
@@ -29,12 +30,24 @@ export const DEFAULT_WEB_SETTINGS_NAMESPACES = new Set([
   'web-search-deepseek',
 ]);
 
+/** A raw settings descriptor returned by the real settings service. */
+interface SettingsDescriptor {
+  ns: string;
+  schema: any;
+  value: any;
+  base?: any;
+  user?: any;
+  applies?: any;
+  secrets?: { path: string[]; set?: any }[];
+  revision?: any;
+}
+
 /**
  * Shape a raw settings descriptor into the official NamespaceView wire shape
  * (mirrors dsh-upstream-fixes/lib/index.js `namespaceView`).
  */
-export function toNamespaceView(descriptor) {
-  const view = {
+export function toNamespaceView(descriptor: SettingsDescriptor): NamespaceView {
+  const view: NamespaceView = {
     ns: String(descriptor.ns),
     schema: descriptor.schema,
     value: descriptor.value,
@@ -51,18 +64,19 @@ export function toNamespaceView(descriptor) {
  * Map a thrown settings error into a SettingsResult, preserving the official
  * `settings-conflict` / `settings-rejected` classification.
  */
-export function settingsErrorToResult(error, ns, method) {
+export function settingsErrorToResult(error: unknown, ns: string, method: string): SettingsResult {
   const isObject = error !== null && typeof error === 'object';
   const isConflict = isObject && ('expected' in error || 'actual' in error);
   if (isConflict) {
+    const err = error as { message?: string; expected?: any; actual?: any };
     return {
       ok: false,
       code: 'settings-conflict',
-      message: error.message ?? String(error),
+      message: err.message ?? String(error),
       details: {
         ns,
-        ...(error.expected === undefined ? {} : { expected: error.expected }),
-        ...(error.actual === undefined ? {} : { actual: error.actual }),
+        ...(err.expected === undefined ? {} : { expected: err.expected }),
+        ...(err.actual === undefined ? {} : { actual: err.actual }),
       },
     };
   }
@@ -75,23 +89,39 @@ export function settingsErrorToResult(error, ns, method) {
 }
 
 /**
- * Build the `ctx.dshLoader.settings` stable API.
- *
- * @param {{ ctx: object, exposeAllNamespaces: boolean, whitelist?: Set<string> }} opts
+ * Internal shape used while building the API: includes the private `_write`
+ * helper so `update`/`replace`/`mutate` can share one implementation.
  */
-export function createSettingsAPI({ ctx, exposeAllNamespaces, whitelist }) {
+type SettingsAPIBuilder = SettingsAPI & {
+  _write(
+    method: 'update' | 'replace' | 'mutate',
+    ns: string,
+    section: any,
+    expectedRevision?: number,
+  ): Promise<SettingsResult>;
+};
+
+/**
+ * Build the `ctx.dshLoader.settings` stable API.
+ */
+export function createSettingsAPI(opts: {
+  ctx: CordisContext;
+  exposeAllNamespaces: boolean;
+  whitelist?: Set<string>;
+}): SettingsAPI {
+  const { ctx, exposeAllNamespaces, whitelist } = opts;
   const allowed = whitelist ?? DEFAULT_WEB_SETTINGS_NAMESPACES;
 
   function getSettings() {
     return ctx.get('settings');
   }
 
-  function filterNamespaces(views) {
+  function filterNamespaces(views: NamespaceView[]) {
     if (exposeAllNamespaces) return views;
     return views.filter((v) => allowed.has(String(v.ns)));
   }
 
-  const api = {
+  const api: SettingsAPIBuilder = {
     exposeAllNamespaces: Boolean(exposeAllNamespaces),
 
     /**
@@ -102,11 +132,6 @@ export function createSettingsAPI({ ctx, exposeAllNamespaces, whitelist }) {
      * Unlike describe/update/replace/mutate, register is NOT filtered by the
      * whitelist: host plugin code is trusted and registering a namespace is
      * a composition-time act, not a browser-facing read/write.
-     *
-     * @param {string} ns - unique namespace (lowercase kebab-case)
-     * @param {object} schema - schemastery schema for this namespace
-     * @param {{ base?: object, applies?: 'live'|'restart', validate?: (value:any)=>void }} [options]
-     * @returns {{ get: () => any, watch: (cb: (value:any)=>void) => () => void } | undefined}
      */
     register(ns, schema, options) {
       const settings = getSettings();
@@ -117,18 +142,23 @@ export function createSettingsAPI({ ctx, exposeAllNamespaces, whitelist }) {
       return settings.register(ns, schema, options);
     },
 
-    describe(options = {}) {
+    describe(options: { redactSecrets?: boolean } = {}) {
       const settings = getSettings();
       if (settings === undefined || typeof settings.describe !== 'function') {
         return [];
       }
       const redactSecrets = options.redactSecrets !== false;
-      const descriptors = settings.describe({ redactSecrets });
+      const descriptors = settings.describe({ redactSecrets }) as SettingsDescriptor[];
       const views = (descriptors ?? []).map(toNamespaceView);
       return filterNamespaces(views);
     },
 
-    async _write(method, ns, section, expectedRevision) {
+    async _write(
+      method: 'update' | 'replace' | 'mutate',
+      ns: string,
+      section: any,
+      expectedRevision?: number,
+    ): Promise<SettingsResult> {
       const settings = getSettings();
       if (settings === undefined) {
         return {
@@ -145,9 +175,9 @@ export function createSettingsAPI({ ctx, exposeAllNamespaces, whitelist }) {
       } catch (error) {
         return settingsErrorToResult(error, ns, method);
       }
-      const descriptor = settings
-        .describe({ redactSecrets: true })
-        .find((d) => String(d.ns) === String(ns));
+      const descriptor = (settings.describe({ redactSecrets: true }) as SettingsDescriptor[]).find(
+        (d) => String(d.ns) === String(ns),
+      );
       if (descriptor === undefined) {
         return {
           ok: false,

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // dshloader CLI entry (M6). Subcommands: setup, dump-config, info.
-import { setupProfile, dumpConfig, info } from '../src/setup.mjs';
+import { setupProfile, dumpConfig, info } from '../dist/setup.js';
 
 const [cmd, ...rest] = process.argv.slice(2);
 

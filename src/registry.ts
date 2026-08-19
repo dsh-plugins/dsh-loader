@@ -24,42 +24,57 @@
 import { readFileSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { createRequire } from 'node:module';
-import semver from 'semver';
+import semver, { type SemVer } from 'semver';
 import { LOG_PREFIX } from './version.js';
+import type { AdapterFactory, AdapterSelection } from './types.js';
 
 const require = createRequire(import.meta.url);
 
+interface DshVersionOptions {
+  profileDir?: string;
+  dshPkgPath?: string;
+  env?: typeof process.env;
+}
+
 export class UnsupportedDshVersionError extends Error {
-  constructor(message, { kind, version, minSupported } = {}) {
+  kind?: string; // 'too-old' | 'too-new'
+  version?: string;
+  minSupported?: string | null;
+
+  constructor(
+    message: string,
+    opts: { kind?: string; version?: string; minSupported?: string | null } = {},
+  ) {
     super(message);
     this.name = 'UnsupportedDshVersionError';
-    this.kind = kind; // 'too-old' | 'too-new'
-    this.version = version;
-    this.minSupported = minSupported;
+    this.kind = opts.kind;
+    this.version = opts.version;
+    this.minSupported = opts.minSupported;
   }
 }
 
 export class InvalidVersionError extends Error {
-  constructor(message, { version } = {}) {
+  version?: string;
+
+  constructor(message: string, opts: { version?: string } = {}) {
     super(message);
     this.name = 'InvalidVersionError';
-    this.version = version;
+    this.version = opts.version;
   }
 }
 
 /**
  * Resolve the installed dsh version.
  *
- * @param {{ profileDir?: string, dshPkgPath?: string, env?: NodeJS.ProcessEnv }} [opts]
- * @returns {string|undefined} semver version string, or undefined when unreachable
+ * @returns semver version string, or undefined when unreachable
  */
-export function detectDshVersion(opts = {}) {
+export function detectDshVersion(opts: DshVersionOptions = {}): string | undefined {
   const env = opts.env ?? process.env;
   const envVal = env.DSHLOADER_DSH_VERSION;
   if (typeof envVal === 'string' && envVal.trim() !== '') {
     return envVal.trim();
   }
-  const candidates = [];
+  const candidates: string[] = [];
   if (opts.dshPkgPath) candidates.push(opts.dshPkgPath);
   if (opts.profileDir) {
     candidates.push(join(opts.profileDir, 'node_modules', '@deepseek-ai', 'dsh', 'package.json'));
@@ -83,7 +98,7 @@ export function detectDshVersion(opts = {}) {
   }
   for (const path of candidates) {
     try {
-      const pkg = JSON.parse(readFileSync(path, 'utf8'));
+      const pkg = JSON.parse(readFileSync(path, 'utf8')) as { version?: string };
       if (typeof pkg.version === 'string' && pkg.version.trim() !== '') {
         return pkg.version.trim();
       }
@@ -96,10 +111,13 @@ export function detectDshVersion(opts = {}) {
  * Parse a semver range into { lower, upper } bounds. Each bound is
  * { v: SemVer, inc: boolean } or null when unbounded on that side.
  */
-function rangeBounds(range) {
+function rangeBounds(range: string): {
+  lower: { v: SemVer; inc: boolean } | null;
+  upper: { v: SemVer; inc: boolean } | null;
+} {
   const r = new semver.Range(range);
-  let lower = null;
-  let upper = null;
+  let lower: { v: SemVer; inc: boolean } | null = null;
+  let upper: { v: SemVer; inc: boolean } | null = null;
   for (const group of r.set) {
     for (const c of group) {
       const op = c.operator;
@@ -122,25 +140,26 @@ function rangeBounds(range) {
 }
 
 /** True when every version the range covers is strictly below `version`. */
-function isLowerCandidate(range, version) {
+function isLowerCandidate(range: string, version: string): boolean {
   const { upper } = rangeBounds(range);
   if (!upper) return false; // unbounded above → can cover version, not a lower candidate
   return upper.inc ? semver.gt(version, upper.v) : semver.gte(version, upper.v);
 }
 
 /** Lowest version that satisfies the range (semver.minVersion). */
-function rangeMinVersion(range) {
+function rangeMinVersion(range: string): string | null {
   const min = semver.minVersion(range);
   return min ? min.version : null;
 }
 
 export class AdapterRegistry {
+  adapters: AdapterFactory[];
+
   constructor() {
-    /** @type {Array<{supports: string, name: string, create: Function}>} */
     this.adapters = [];
   }
 
-  register(factory) {
+  register(factory: AdapterFactory): this {
     if (!factory || typeof factory.supports !== 'string' || typeof factory.create !== 'function') {
       throw new TypeError('AdapterFactory must expose { supports: string, create: function }');
     }
@@ -148,11 +167,7 @@ export class AdapterRegistry {
     return this;
   }
 
-  /**
-   * @param {string} version real dsh version
-   * @returns {{ factory: object, mode: 'exact'|'range'|'fallback' }}
-   */
-  select(version) {
+  select(version: string): AdapterSelection {
     if (!semver.valid(version)) {
       throw new InvalidVersionError(
         `${LOG_PREFIX} cannot parse dsh version "${version}" as semver`,
@@ -167,7 +182,7 @@ export class AdapterRegistry {
     }
 
     // Rule 1 + 2: exact and range matches.
-    const matches = [];
+    const matches: AdapterSelection[] = [];
     for (const factory of this.adapters) {
       if (factory.supports === version) {
         matches.push({ factory, mode: 'exact' });
@@ -208,10 +223,10 @@ export class AdapterRegistry {
       });
     if (lowers.length > 0) {
       lowers.sort((a, b) => {
-        const cmp = semver.compare(b.upper.v, a.upper.v);
+        const cmp = semver.compare(b.upper!.v, a.upper!.v);
         if (cmp !== 0) return cmp;
         // exclusive upper is "higher" than inclusive at the same version
-        return (b.upper.inc ? 0 : 1) - (a.upper.inc ? 0 : 1);
+        return (b.upper!.inc ? 0 : 1) - (a.upper!.inc ? 0 : 1);
       });
       const chosen = lowers[0];
       console.warn(
@@ -223,8 +238,8 @@ export class AdapterRegistry {
     // Rule 4 vs 5: too old vs too new.
     const minVersions = this.adapters
       .map((f) => rangeMinVersion(f.supports))
-      .filter(Boolean)
-      .map((v) => semver.parse(v));
+      .filter((v): v is string => v !== null)
+      .map((v) => semver.parse(v)!);
     if (minVersions.length > 0) {
       const lowest = minVersions.reduce((acc, v) => (semver.lt(v, acc) ? v : acc));
       if (semver.lt(version, lowest)) {

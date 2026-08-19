@@ -1,12 +1,12 @@
-// L1 unit tests — Web stable API + service alias (design.md §4.3, §4.4, §5.2, §5.4).
+// L1 unit tests �?Web stable API + service alias (design.md §4.3, §4.4, §5.2, §5.4).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createWebAPI, DshLoaderWebError } from '../src/services/web.js';
-import { createServicesAPI } from '../src/services/services.js';
+import { createWebAPI, DshLoaderWebError } from '../dist/services/web.js';
+import { createServicesAPI } from '../dist/services/services.js';
 import { makeMockCtx, makeMockWebServer } from './helpers/mock.mjs';
-import { create as createDsh1xAdapter, installHostPackageAliases } from '../src/adapters/dsh-1-x.js';
+import { create as createDsh1xAdapter, installHostPackageAliases } from '../dist/adapters/dsh-1-x.js';
 
-// TC-WEB-01: register prefix route → webServer.register called with kind prefix.
+// TC-WEB-01: register prefix route �?webServer.register called with kind prefix.
 test('TC-WEB-01 web.register registers prefix route', () => {
   const { webServer, registrations } = makeMockWebServer();
   const { ctx, registerService } = makeMockCtx();
@@ -19,7 +19,7 @@ test('TC-WEB-01 web.register registers prefix route', () => {
   assert.equal(registrations[0].path, '/api/demo');
 });
 
-// TC-WEB-02: use middleware → webServer.register called with kind middleware.
+// TC-WEB-02: use middleware �?webServer.register called with kind middleware.
 test('TC-WEB-02 web.use registers middleware kind', () => {
   const { webServer, registrations } = makeMockWebServer();
   const { ctx, registerService } = makeMockCtx();
@@ -31,7 +31,7 @@ test('TC-WEB-02 web.use registers middleware kind', () => {
   assert.equal(registrations[0].handler, mw);
 });
 
-// TC-BND-SVC-01: webServer missing → error with dshloader prefix.
+// TC-BND-SVC-01: webServer missing �?error with dshloader prefix.
 test('TC-BND-SVC-01 web.register without webServer throws dshloader error', () => {
   const { ctx } = makeMockCtx();
   const web = createWebAPI({ ctx });
@@ -99,7 +99,7 @@ test('services.alias provides one-hop alias and skips when source exists', () =>
   const services = createServicesAPI({ ctx });
   services.alias('httpServer', 'webServer');
   assert.equal(ctx.get('httpServer'), target);
-  // second call: source now exists → skip, no overwrite
+  // second call: source now exists �?skip, no overwrite
   services.alias('httpServer', 'webServer');
   assert.equal(ctx.get('httpServer'), target);
 });
@@ -153,7 +153,7 @@ test('TC-HOST-PKG-01 installHostPackageAliases maps CJS require', async () => {
     const dispose = await installHostPackageAliases({
       '@old/host-pkg': '@new/host-pkg',
     });
-    // Simulate a require('@old/host-pkg') — the hook should map it.
+    // Simulate a require('@old/host-pkg') �?the hook should map it.
     Module._resolveFilename('@old/host-pkg');
     Module._resolveFilename('node:fs');
     assert.deepEqual(resolved, ['@new/host-pkg', 'node:fs']);
@@ -185,7 +185,7 @@ test('TC-HOST-PKG-03 stable @dsh-plugin/dsh-loader/* maps to real dsh packages',
     return `/fake/${request}`;
   };
   try {
-    const { hostPackageAliases } = await import('../src/adapters/dsh-1-x.js');
+    const { hostPackageAliases } = await import('../dist/adapters/dsh-1-x.js');
     const dispose = await installHostPackageAliases(hostPackageAliases);
     Module._resolveFilename('@dsh-plugin/dsh-loader/tools');
     Module._resolveFilename('@dsh-plugin/dsh-loader/llm');

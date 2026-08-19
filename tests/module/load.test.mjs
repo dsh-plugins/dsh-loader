@@ -1,7 +1,7 @@
-// L2 module tests — host bundle load / lifecycle / rollback (design.md §4.1, §4.8, §4.10, §5.5).
+// L2 module tests �?host bundle load / lifecycle / rollback (design.md §4.1, §4.8, §4.10, §5.5).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { apply, applyAdapter, readLoaderConfig } from '../../src/index.js';
+import { apply, applyAdapter, readLoaderConfig } from '../../dist/index.js';
 import { makeMockCtx, makeMockWebServer, makeTempProfile } from '../helpers/mock.mjs';
 
 // TC-LOAD-01: dshloader apply registers ctx.dshLoader and logs startup info.
@@ -25,7 +25,7 @@ test('TC-LOAD-01 apply registers ctx.dshLoader and logs adapter info', async () 
   assert.ok(logs.some((l) => /registered stable API: settings, web, services/.test(l)));
 });
 
-// TC-LOAD-02: dshloader after a reactive consumer — alias still resolves.
+// TC-LOAD-02: dshloader after a reactive consumer �?alias still resolves.
 test('TC-LOAD-02 reactive consumer resolves alias regardless of order', async () => {
   const { webServer } = makeMockWebServer();
   const { ctx, services, registerService } = makeMockCtx();
@@ -44,7 +44,7 @@ test('TC-LOAD-02 reactive consumer resolves alias regardless of order', async ()
     downstream.state = 'ACTIVE';
     downstream.got = http;
   };
-  // 1. load downstream first → PENDING.
+  // 1. load downstream first �?PENDING.
   downstream.tryApply();
   assert.equal(downstream.state, 'PENDING');
   // 2. dshloader apply (after downstream) registers the alias.
@@ -117,7 +117,7 @@ test('TC-ROLL-01 DSHLOADER_DISABLE=1 skips registration', async () => {
   assert.ok(logs.some((l) => /disabled by env, skipping/.test(l)));
 });
 
-// TC-ROLL-02: disabled patch flag → apply is a no-op (simulated via env).
+// TC-ROLL-02: disabled patch flag �?apply is a no-op (simulated via env).
 test('TC-ROLL-02 disabled patch skips registration', async () => {
   const { webServer } = makeMockWebServer();
   const { ctx, registerService } = makeMockCtx();
@@ -134,7 +134,7 @@ test('TC-ROLL-02 disabled patch skips registration', async () => {
   assert.equal(ctx.get('httpServer'), undefined);
 });
 
-// TC-BND-CON-02: webServer removed then restored → effects recycle, no duplicate.
+// TC-BND-CON-02: webServer removed then restored �?effects recycle, no duplicate.
 test('TC-BND-CON-02 fiber unload+reload recycles effects without duplicates', async () => {
   const { webServer, registrations } = makeMockWebServer();
   const { ctx, effects, registerService } = makeMockCtx();
@@ -173,7 +173,7 @@ test('readLoaderConfig honors DSHLOADER_EXPOSE_ALL_SETTINGS env', () => {
 
 // Version detection via temp profile package.json.
 test('detectDshVersion reads profile node_modules dsh package.json', async () => {
-  const { detectDshVersion } = await import('../../src/registry.js');
+  const { detectDshVersion } = await import('../../dist/registry.js');
   const prof = makeTempProfile({ dshVersion: '1.4.2' });
   try {
     delete process.env.DSHLOADER_DSH_VERSION;

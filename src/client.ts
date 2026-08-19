@@ -19,12 +19,43 @@ import { LOADER_VERSION, LOG_PREFIX } from './version.js';
 import { clientAdapters } from './adapters/index.js';
 import { BRIDGE_PREFIX } from './adapters/dsh-1-x.js';
 
+/** Browser-only globals dshloader relies on (typed loosely so the module compiles without DOM lib). */
+type FetchImpl = (input: any, init?: any) => Promise<{ clone(): { json(): any }; json(): any }>;
+interface DshLoaderWindowLike {
+  fetch: FetchImpl;
+  location?: { origin?: string };
+  Response?: new (body?: string, init?: { status?: number; headers?: Record<string, string> }) => any;
+  __ModuleLoader__?: {
+    load(handoff: { id: string; factory: (require: (spec: string) => any) => any }): unknown;
+  };
+  __DSHLOADER_VERSION__?: string;
+  __DSHLOADER_CONFIG__?: { exposeAllNamespaces?: boolean };
+  __dshNativeRequire__?: (spec: string) => any;
+  __dshLoader__?: unknown;
+}
+
+declare global {
+  // Minimal browser global used only when this module is run in the browser
+  // bundle (the host build never touches it). Declared here so the module
+  // type-checks without pulling in the full DOM lib.
+  const window: DshLoaderWindowLike;
+}
+
 export class ModuleNotFoundError extends Error {
-  constructor(specifier) {
+  specifier: string;
+
+  constructor(specifier: string) {
     super(`${LOG_PREFIX} module not found: ${specifier}`);
     this.name = 'ModuleNotFoundError';
     this.specifier = specifier;
   }
+}
+
+interface ClientAdapter {
+  supports: string;
+  name: string;
+  moduleAliases?: Record<string, string>;
+  packageAliases?: Record<string, string>;
 }
 
 /**
@@ -32,24 +63,29 @@ export class ModuleNotFoundError extends Error {
  * client adapter (dsh 1.x); when more are added, swap this for a semver-based
  * selection mirroring the host AdapterRegistry.
  */
-function pickClientAdapter(dshVersion) {
+function pickClientAdapter(dshVersion?: string): ClientAdapter {
   return clientAdapters[0];
+}
+
+interface CreateClientAPIOpts {
+  dshVersion?: string;
+  adapterVersion?: string;
+  moduleAliases?: Record<string, string>;
+  packageAliases?: Map<string, string> | Record<string, string>;
+  requireImpl?: (spec: string) => any;
+  fetchBridge?: {
+    describe: () => Promise<any>;
+    write: (mode: string, payload: object) => Promise<any>;
+  };
+  clientCtx?: { get?: (name: string) => any };
 }
 
 /**
  * Build the `window.__dshLoader__` API object.
- * @param {{
- *   dshVersion?: string,
- *   adapterVersion?: string,
- *   moduleAliases?: Record<string,string>,
- *   requireImpl?: (spec: string) => any,
- *   fetchBridge?: { describe: () => Promise<any>, write: (mode:string, payload:object) => Promise<any> },
- *   clientCtx?: object,  // cordis client context (for services.get)
- * }} opts
  */
-export function createClientAPI(opts = {}) {
+export function createClientAPI(opts: CreateClientAPIOpts = {}) {
   const aliases = new Map(Object.entries(opts.moduleAliases ?? {}));
-  const requireImpl = opts.requireImpl ?? ((spec) => {
+  const requireImpl = opts.requireImpl ?? ((spec: string) => {
     throw new ModuleNotFoundError(spec);
   });
   const clientCtx = opts.clientCtx;
@@ -65,7 +101,7 @@ export function createClientAPI(opts = {}) {
     dshVersion: opts.dshVersion,
     adapterVersion: opts.adapterVersion,
 
-    require(specifier) {
+    require(specifier: string) {
       if (typeof specifier !== 'string') throw new ModuleNotFoundError(String(specifier));
       const target = aliases.get(specifier);
       if (target === undefined) {
@@ -74,7 +110,7 @@ export function createClientAPI(opts = {}) {
       return requireImpl(target);
     },
 
-    registerModuleAlias(alias, target) {
+    registerModuleAlias(alias: string, target: string) {
       aliases.set(alias, target);
     },
 
@@ -85,7 +121,7 @@ export function createClientAPI(opts = {}) {
      * hitting the module table. This lets dsh rename client packages
      * across versions without forcing plugin bundles to rebuild.
      */
-    registerPackageAlias(oldName, newName) {
+    registerPackageAlias(oldName: string, newName: string) {
       packageAliases.set(oldName, newName);
     },
 
@@ -100,7 +136,7 @@ export function createClientAPI(opts = {}) {
      * (cordis client boot). Returns undefined when ctx is not wired.
      */
     services: {
-      get(name) {
+      get(name: string) {
         if (clientCtx === undefined || typeof clientCtx.get !== 'function') return undefined;
         return clientCtx.get(name);
       },
@@ -109,10 +145,10 @@ export function createClientAPI(opts = {}) {
     rpc: opts.fetchBridge
       ? {
           settings: {
-            describe: () => opts.fetchBridge.describe(),
-            update: (ns, section) => opts.fetchBridge.write('update', { ns, section }),
-            replace: (ns, section) => opts.fetchBridge.write('replace', { ns, section }),
-            mutate: (ns, ops) => opts.fetchBridge.write('mutate', { ns, ops }),
+            describe: () => opts.fetchBridge!.describe(),
+            update: (ns: string, section: unknown) => opts.fetchBridge!.write('update', { ns, section }),
+            replace: (ns: string, section: unknown) => opts.fetchBridge!.write('replace', { ns, section }),
+            mutate: (ns: string, ops: unknown) => opts.fetchBridge!.write('mutate', { ns, ops }),
           },
         }
       : undefined,
@@ -121,22 +157,24 @@ export function createClientAPI(opts = {}) {
   return api;
 }
 
+interface InstallClientOpts {
+  window?: DshLoaderWindowLike;
+  dshVersion?: string;
+  exposeAllNamespaces?: boolean;
+  requireImpl?: (spec: string) => any;
+  hostBridgePrefix?: string;
+  packageAliases?: Record<string, string>;
+  clientCtx?: { get?: (name: string) => any };
+}
+
 /**
  * Install dshloader into a browser-like environment.
- * @param {{
- *   window?: any,
- *   dshVersion?: string,
- *   exposeAllNamespaces?: boolean,
- *   requireImpl?: (spec: string) => any,
- *   hostBridgePrefix?: string,
- *   clientCtx?: object,  // cordis client context (passed from apply(ctx))
- * }} [opts]
  */
-export function installClient(opts = {}) {
-  const win = opts.window ?? (typeof window !== 'undefined' ? window : undefined);
+export function installClient(opts: InstallClientOpts = {}) {
+  const win = opts.window ?? (typeof window !== 'undefined' ? (window as DshLoaderWindowLike) : undefined);
   if (win === undefined) return undefined;
 
-  const dshVersion = opts.dshVersion ?? win.__DSHLOADER_VERSION__ ?? undefined;
+  const dshVersion = opts.dshVersion ?? win.__DSHLOADER_VERSION__;
   const adapter = pickClientAdapter(dshVersion);
   const moduleAliases = { ...(adapter.moduleAliases ?? {}) };
   // Merge adapter-declared package aliases with any passed via opts (opts
@@ -154,8 +192,9 @@ export function installClient(opts = {}) {
 
   const fetchBridge = exposeAllNamespaces
     ? {
-        describe: () => win.fetch(`${bridgePrefix}/settings/describe`, { headers: { accept: 'application/json' } }).then((r) => r.json()),
-        write: (mode, payload) =>
+        describe: () =>
+          win.fetch(`${bridgePrefix}/settings/describe`, { headers: { accept: 'application/json' } }).then((r) => r.json()),
+        write: (mode: string, payload: object) =>
           win.fetch(`${bridgePrefix}/settings/${mode}`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -182,9 +221,9 @@ export function installClient(opts = {}) {
   const loader = win.__ModuleLoader__;
   if (loader && typeof loader.load === 'function') {
     const originalLoad = loader.load.bind(loader);
-    loader.load = function dshloaderLoad(handoff) {
-      const wrappedFactory = (require) => {
-        const aliasedRequire = (spec) => {
+    loader.load = function dshloaderLoad(handoff: { id: string; factory: (require: (spec: string) => any) => any }) {
+      const wrappedFactory = (require: (spec: string) => any) => {
+        const aliasedRequire = (spec: string) => {
           const mapped = packageAliases.get(spec);
           return require(mapped ?? spec);
         };
@@ -199,7 +238,7 @@ export function installClient(opts = {}) {
     for (const [aliasId, target] of Object.entries(moduleAliases)) {
       loader.load({
         id: aliasId,
-        factory: (require) => {
+        factory: (require: (spec: string) => any) => {
           const mod = require(target);
           // Preserve the deep import's expected named export shape.
           if (aliasId.endsWith('context-provenance.ts') || aliasId.endsWith('context-provenance')) {
@@ -230,16 +269,20 @@ export function installClient(opts = {}) {
  *   response envelope as `{ type: 'server-response', rpcId, result }` so the
  *   official client can correlate the response with the request.
  */
-export function installSettingsFetchInterceptor(win, bridgePrefix = BRIDGE_PREFIX) {
+export function installSettingsFetchInterceptor(
+  win: DshLoaderWindowLike,
+  bridgePrefix = BRIDGE_PREFIX,
+): () => void {
   if (typeof win.fetch !== 'function') return () => {};
   const originalFetch = win.fetch;
   /** Namespaces the official proxy itself exposed (learned from describe). */
-  const officialExposed = new Set();
+  const officialExposed = new Set<string>();
 
-  win.fetch = async function dshloaderFetch(input, init) {
+  win.fetch = async function dshloaderFetch(this: unknown, input: any, init?: any) {
     let pathname = '';
     try {
-      pathname = new URL(typeof input === 'string' ? input : input.url, win.location?.origin ?? 'http://localhost').pathname;
+      const urlLike = typeof input === 'string' ? input : (input as { url?: string }).url;
+      pathname = new URL(urlLike as string, win.location?.origin ?? 'http://localhost').pathname;
     } catch {
       pathname = String(input).split('?')[0];
     }
@@ -247,7 +290,7 @@ export function installSettingsFetchInterceptor(win, bridgePrefix = BRIDGE_PREFI
 
     // describe: merge bridge namespaces into the official response.
     if (pathname === '/api/settings.describe') {
-      const response = await originalFetch(input, init);
+      const response = await originalFetch.call(this, input, init);
       try {
         const body = await response.clone().json();
         const namespaces = body?.result?.value?.namespaces;
@@ -255,14 +298,15 @@ export function installSettingsFetchInterceptor(win, bridgePrefix = BRIDGE_PREFI
         for (const row of namespaces) {
           if (typeof row?.ns === 'string') officialExposed.add(row.ns);
         }
-        const extra = await originalFetch(`${bridgePrefix}/settings/describe`, {
+        const extra = await originalFetch.call(this, `${bridgePrefix}/settings/describe`, {
           headers: { accept: 'application/json' },
         });
         const extraBody = await extra.json();
         if (extraBody?.ok !== true || !Array.isArray(extraBody.namespaces)) return response;
-        const seen = new Set(namespaces.map((row) => row.ns));
-        const merged = [...namespaces, ...extraBody.namespaces.filter((row) => !seen.has(row.ns))];
-        return new win.Response(
+        const seen = new Set(namespaces.map((row: { ns: string }) => row.ns));
+        const merged = [...namespaces, ...extraBody.namespaces.filter((row: { ns: string }) => !seen.has(row.ns))];
+        const ResponseCtor = win.Response!;
+        return new ResponseCtor(
           JSON.stringify({ ...body, result: { ...body.result, value: { ...body.result.value, namespaces: merged } } }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
@@ -276,8 +320,8 @@ export function installSettingsFetchInterceptor(win, bridgePrefix = BRIDGE_PREFI
       (pathname === '/api/settings.update' || pathname === '/api/settings.mutate' || pathname === '/api/settings.replace') &&
       method === 'POST'
     ) {
-      let rpcId = null;
-      let payload = null;
+      let rpcId: unknown = null;
+      let payload: { ns?: string; [k: string]: unknown } | null = null;
       try {
         const parsed = JSON.parse(String(init?.body ?? '{}'));
         rpcId = parsed.rpcId;
@@ -289,14 +333,15 @@ export function installSettingsFetchInterceptor(win, bridgePrefix = BRIDGE_PREFI
       if (rpcId !== null && ns !== '' && officialExposed.size > 0 && !officialExposed.has(ns)) {
         try {
           const mode = pathname.slice('/api/settings.'.length);
-          const res = await originalFetch(`${bridgePrefix}/settings/${mode}`, {
+          const res = await originalFetch.call(this, `${bridgePrefix}/settings/${mode}`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(payload),
           });
           const body = await res.json();
           if (body?.result) {
-            return new win.Response(
+            const ResponseCtor = win.Response!;
+            return new ResponseCtor(
               JSON.stringify({ type: 'server-response', rpcId, result: body.result }),
               { status: 200, headers: { 'content-type': 'application/json' } },
             );
@@ -307,7 +352,7 @@ export function installSettingsFetchInterceptor(win, bridgePrefix = BRIDGE_PREFI
       }
     }
 
-    return originalFetch(input, init);
+    return originalFetch.call(this, input, init);
   };
 
   return () => {
@@ -324,7 +369,7 @@ export function installSettingsFetchInterceptor(win, bridgePrefix = BRIDGE_PREFI
 // wires the client cordis ctx for `services.get`, and (when opted in)
 // installs the settings fetch interceptor.
 export const name = '@dsh-plugin/dsh-loader'
-export const inject = []
-export function apply(ctx) {
-  if (typeof window !== 'undefined') installClient({ window, clientCtx: ctx });
+export const inject: string[] = []
+export function apply(ctx: { get?: (name: string) => any }) {
+  if (typeof window !== 'undefined') installClient({ window: window as DshLoaderWindowLike, clientCtx: ctx });
 }

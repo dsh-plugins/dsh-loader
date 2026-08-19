@@ -161,21 +161,27 @@ dshloader info [profile]         打印 loader 版本、探测到的 dsh 版本�
 
 ```
 src/
-  index.js            host bundle 入口（name / inject / apply）
-  client.js           client bundle 入口（immediately tier）
-  api.js              DshLoaderHostAPI 构造
-  registry.js         适配器注册表 + 版本探测
-  version.js          loader 版本 + 日志前缀
+  index.ts            host bundle 入口（name / inject / apply）
+  client.ts           client bundle 入口（immediately tier）
+  api.ts              DshLoaderHostAPI 构造
+  registry.ts         适配器注册表 + 版本探测
+  types.ts            共享 host/client TypeScript 类型
+  version.ts          loader 版本 + 日志前缀
   stable/             稳定 subpath re-export（ui-primitives、tools 等）
   services/
-    settings.js       settings 稳定 API
-    web.js            web 稳定 API
-    services.js       services 稳定 API（get / alias）
+    settings.ts       settings 稳定 API
+    web.ts            web 稳定 API
+    services.ts       services 稳定 API（get / alias）
   adapters/
-    dsh-1-x.js        dsh 1.x 适配器
-    index.js          适配器注册
-  setup.mjs           profile 注入 + dump-config + info
+    dsh-1-x.ts        dsh 1.x 适配器
+    index.ts          适配器注册
+  setup.ts            profile 注入 + dump-config + info
 bin/dshloader.mjs     CLI 入口
+dist/                 编译后的 host 产物（tsc 输出，已 git-ignore）
+lib/                  编译后的 client bundle（tsdown 输出，已 git-ignore）
+tsconfig.json         typecheck 配置
+tsconfig.build.json   host 构建配置（产出 dist/）
+tsdown.client.config.mjs  client bundle 构建配置
 docs/
   api.md              完整 API 参考
   design.md           设计文档
@@ -189,6 +195,8 @@ examples/
 
 ```sh
 pnpm install
+npm run typecheck   # 类型检查 src/**/*.ts
+npm run build       # 编译 host（dist/）+ client bundle（lib/）
 npm test            # 全部测试
 npm run test:l1     # 单元测试
 npm run test:l2     # 模块测试

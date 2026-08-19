@@ -2,19 +2,21 @@
 // registers it on the provided AdapterRegistry. Kept as a function so tests
 // can build a fresh registry per case.
 import * as dsh1x from './dsh-1-x.js';
+import type { AdapterFactory } from '../types.js';
+import type { AdapterRegistry } from '../registry.js';
 
 /** All host adapter factories, in registration order. */
-export const hostAdapters = [
+export const hostAdapters: AdapterFactory[] = [
   { supports: dsh1x.supports, name: dsh1x.name, create: dsh1x.create },
 ];
 
 /** Register every built-in host adapter onto a registry. */
-export function registerHostAdapters(registry) {
+export function registerHostAdapters(registry: AdapterRegistry): AdapterRegistry {
   for (const factory of hostAdapters) registry.register(factory);
   return registry;
 }
 
-// Client adapter metadata for dsh 1.x (consumed by src/client.js).
+// Client adapter metadata for dsh 1.x (consumed by src/client.ts).
 //
 // packageAliases serves TWO roles:
 //   1. **Stable name → real name** (primary): plugins import from stable

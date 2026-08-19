@@ -6,30 +6,30 @@
 // dispose function that removes the registration when the underlying
 // service supports it.
 import { LOG_PREFIX } from '../version.js';
+import type { CordisContext, WebAPI } from '../types.js';
 
 export class DshLoaderWebError extends Error {
-  constructor(message) {
+  constructor(message: string) {
     super(message);
     this.name = 'DshLoaderWebError';
   }
 }
 
 /** Resolve the active web server service (webServer preferred, httpServer alias next). */
-function resolveWebServer(ctx) {
+function resolveWebServer(ctx: CordisContext) {
   return ctx.get('webServer') ?? ctx.get('httpServer');
 }
 
 /**
  * Build the `ctx.dshLoader.web` stable API.
- * @param {{ ctx: object }} opts
  */
-export function createWebAPI({ ctx }) {
+export function createWebAPI(opts: { ctx: CordisContext }): WebAPI {
+  const { ctx } = opts;
+
   function server() {
     const web = resolveWebServer(ctx);
     if (web === undefined || typeof web.register !== 'function') {
-      throw new DshLoaderWebError(
-        `${LOG_PREFIX}:web webServer service unavailable`,
-      );
+      throw new DshLoaderWebError(`${LOG_PREFIX}:web webServer service unavailable`);
     }
     return web;
   }
@@ -55,8 +55,7 @@ export function createWebAPI({ ctx }) {
      * Register a WebSocket upgrade route for an exact pathname.
      * Proxies to `webServer.registerUpgrade({ path, handler })`.
      *
-     * @param {{ path: string, handler: (req: any, socket: any, head: Buffer) => void }} route
-     * @returns {() => void} dispose function that removes the upgrade route
+     * @returns dispose function that removes the upgrade route
      */
     registerUpgrade(route) {
       const web = server();

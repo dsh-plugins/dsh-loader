@@ -23,16 +23,16 @@ import { registerHostAdapters } from './adapters/index.js';
 const LOADER_PKG = '@dsh-plugin/dsh-loader';
 const PATCH_ENTRY = `- id: dsh-loader\n      name: '${LOADER_PKG}'`;
 
-export function dshHome() {
+export function dshHome(): string {
   const env = process.env.DSH_HOME?.trim();
   return env ? resolve(env) : join(process.env.HOME ?? '~', '.dsh');
 }
 
-export function profileDir(profileName) {
+export function profileDir(profileName: string): string {
   return join(dshHome(), 'profiles', profileName);
 }
 
-function readJson(path) {
+function readJson(path: string): any {
   try {
     return JSON.parse(readFileSync(path, 'utf8'));
   } catch {
@@ -40,12 +40,12 @@ function readJson(path) {
   }
 }
 
-function writeJson(path, data) {
+function writeJson(path: string, data: unknown): void {
   writeFileSync(path, JSON.stringify(data, undefined, 2) + '\n');
 }
 
 /** Ensure dshloader is listed in the profile package.json dependencies. */
-export function injectDependency(pkgPath) {
+export function injectDependency(pkgPath: string): { added: boolean; manifest: any } {
   const manifest = readJson(pkgPath) ?? { name: '', dependencies: {} };
   manifest.dependencies = manifest.dependencies ?? {};
   if (manifest.dependencies[LOADER_PKG] === undefined) {
@@ -57,14 +57,14 @@ export function injectDependency(pkgPath) {
 }
 
 /** Ensure the dshloader insert entry exists in cordis.patch.yml (no reorder). */
-export function injectPatch(patchPath) {
+export function injectPatch(patchPath: string): { added: boolean; text: string } {
   let text = '';
   try {
     text = readFileSync(patchPath, 'utf8');
   } catch {
     text = '';
   }
-  if (text.includes("id: dsh-loader")) {
+  if (text.includes('id: dsh-loader')) {
     return { added: false, text };
   }
   const insertion = `- insert:\n    ${PATCH_ENTRY}\n`;
@@ -75,10 +75,14 @@ export function injectPatch(patchPath) {
 
 /**
  * Run `dshloader setup <profile>`.
- * @param {string} profileName
- * @returns {{ profileDir: string, dependencyAdded: boolean, patchAdded: boolean }}
+ * @param profileName
+ * @returns
  */
-export function setupProfile(profileName) {
+export function setupProfile(profileName: string): {
+  profileDir: string;
+  dependencyAdded: boolean;
+  patchAdded: boolean;
+} {
   const dir = profileDir(profileName);
   if (!existsSync(dir)) {
     throw new Error(`${LOG_PREFIX} profile directory not found: ${dir}`);
@@ -93,7 +97,7 @@ export function setupProfile(profileName) {
 }
 
 /** Best-effort dump-config validation. Returns { ok, output } (never throws). */
-export function dumpConfig(profileName) {
+export function dumpConfig(profileName: string): { ok: boolean; output: string } {
   const dir = profileDir(profileName);
   if (!existsSync(dir)) {
     return { ok: false, output: `${LOG_PREFIX} profile directory not found: ${dir}` };
@@ -107,7 +111,7 @@ export function dumpConfig(profileName) {
 }
 
 /** Print dshloader status for a profile (AC-OB-03, minimal). */
-export function info(profileName) {
+export function info(profileName?: string): { loaderVersion: string; dshVersion?: string } {
   console.log(`${LOG_PREFIX} version ${LOADER_VERSION}`);
   const dir = profileName ? profileDir(profileName) : undefined;
   const dshVersion = detectDshVersion(dir ? { profileDir: dir } : {});
@@ -118,7 +122,7 @@ export function info(profileName) {
       const { factory, mode } = reg.select(dshVersion);
       console.log(`${LOG_PREFIX} selected adapter: ${factory.name} (supports ${factory.supports}, mode ${mode})`);
     } catch (error) {
-      console.log(`${LOG_PREFIX} adapter selection: ${error.message}`);
+      console.log(`${LOG_PREFIX} adapter selection: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
   return { loaderVersion: LOADER_VERSION, dshVersion };

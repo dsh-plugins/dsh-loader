@@ -1,4 +1,4 @@
-// L3 integration tests — profile injection + adapter upgrade flow (design.md §4.11, §6.1).
+// L3 integration tests �?profile injection + adapter upgrade flow (design.md §4.11, §6.1).
 //
 // Real dsh is not assumed to be installed (GAP-01); these tests cover the
 // mock-profile paths: setup script injection, dump-config graceful skip, and
@@ -8,8 +8,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { setupProfile, injectDependency, injectPatch, dumpConfig, info } from '../../src/setup.mjs';
-import { AdapterRegistry, UnsupportedDshVersionError } from '../../src/registry.js';
+import { setupProfile, injectDependency, injectPatch, dumpConfig, info } from '../../dist/setup.js';
+import { AdapterRegistry, UnsupportedDshVersionError } from '../../dist/registry.js';
 
 function makeProfile(name) {
   const root = mkdtempSync(join(tmpdir(), 'dshloader-it-'));
@@ -66,7 +66,7 @@ test('dump-config returns not-ok when dsh CLI unavailable', () => {
   process.env.DSH_HOME = prof.home;
   try {
     const { ok } = dumpConfig('web');
-    // dsh not installed in CI → expect false; if installed, ok may be true.
+    // dsh not installed in CI �?expect false; if installed, ok may be true.
     assert.ok(typeof ok === 'boolean');
   } finally {
     process.env.DSH_HOME = origHome;
@@ -100,11 +100,11 @@ test('info prints loader and dsh version', () => {
 // NOTE on the test plan's "step 1 fails with UnsupportedDshVersionError":
 // per design.md §3.1 rule 3, a version above a bounded adapter's range is a
 // nearest-low FALLBACK, not a too-new error (a too-new error only happens with
-// an empty registry — TC-REG-03). So step 1 here records the *plugin-level*
+// an empty registry �?TC-REG-03). So step 1 here records the *plugin-level*
 // failure (the 1.x adapter calls the old signature, which dsh 3.0.0 rejects),
 // matching the design doc's allowed "插件报错" outcome.
 test('TC-E2E-01 adding adapter for new dsh version restores plugin', async () => {
-  const { createHostAPI } = await import('../../src/api.js');
+  const { createHostAPI } = await import('../../dist/api.js');
   const { makeMockCtx } = await import('../helpers/mock.mjs');
 
   // Mock dsh 3.0.0 settings service: update() now takes (ns, { ops }, rev).
@@ -140,7 +140,7 @@ test('TC-E2E-01 adding adapter for new dsh version restores plugin', async () =>
   assert.ok(warns.some((w) => /falling back/.test(w)));
 
   // The plugin uses the stable API (old signature) via the 1.x adapter; dsh
-  // 3.0.0 rejects it → plugin-level failure (SettingsResult ok:false).
+  // 3.0.0 rejects it �?plugin-level failure (SettingsResult ok:false).
   const ctx1 = makeMockCtx();
   ctx1.registerService('settings', settings3);
   const api1 = createHostAPI({ ctx: ctx1.ctx, dshVersion: '3.0.0', factory: step1.factory, adapter: step1.factory.create(ctx1.ctx, {}), exposeAllNamespaces: true });

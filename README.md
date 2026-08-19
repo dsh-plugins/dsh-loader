@@ -185,21 +185,27 @@ dshloader info [profile]         Print loader version, detected dsh version,
 
 ```
 src/
-  index.js            host bundle entry (name / inject / apply)
-  client.js           client bundle entry (immediately tier)
-  api.js              DshLoaderHostAPI construction
-  registry.js         AdapterRegistry + version detection
-  version.js          loader version + log prefix
+  index.ts            host bundle entry (name / inject / apply)
+  client.ts           client bundle entry (immediately tier)
+  api.ts              DshLoaderHostAPI construction
+  registry.ts         AdapterRegistry + version detection
+  types.ts            shared host/client TypeScript types
+  version.ts          loader version + log prefix
   stable/             stable subpath re-exports (ui-primitives, tools, ...)
   services/
-    settings.js       settings stable API
-    web.js            web stable API
-    services.js       services stable API (get / alias)
+    settings.ts       settings stable API
+    web.ts            web stable API
+    services.ts       services stable API (get / alias)
   adapters/
-    dsh-1-x.js        dsh 1.x adapter
-    index.js          adapter registration
-  setup.mjs           profile injection + dump-config + info
+    dsh-1-x.ts        dsh 1.x adapter
+    index.ts          adapter registration
+  setup.ts            profile injection + dump-config + info
 bin/dshloader.mjs     CLI entry
+dist/                 compiled host build (tsc output, git-ignored)
+lib/                  compiled client bundle (tsdown output, git-ignored)
+tsconfig.json         typecheck config
+tsconfig.build.json   host build config (emits dist/)
+tsdown.client.config.mjs  client bundle build config
 docs/
   api.md              full API reference (Chinese)
   design.md           design document (Chinese)
@@ -213,6 +219,8 @@ examples/
 
 ```sh
 pnpm install
+npm run typecheck   # type-check src/**/*.ts
+npm run build       # compile host (dist/) + client bundle (lib/)
 npm test            # all tests
 npm run test:l1     # unit
 npm run test:l2     # module

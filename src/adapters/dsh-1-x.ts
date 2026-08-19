@@ -4,9 +4,9 @@
 //   - httpServer -> webServer single-hop service alias (fix 2).
 //   - settings namespace whitelist bypass bridge, gated behind
 //     `exposeAllNamespaces` (fix 5). Two independent paths:
-//       * host side: ctx.dshLoader.settings.* (handled by services/settings.js
+//       * host side: ctx.dshLoader.settings.* (handled by services/settings.ts
 //         + the bridge routes registered here for the browser fetch path).
-//       * client side: fetch interceptor in src/client.js.
+//       * client side: fetch interceptor in src/client.ts.
 //   - package-name aliasing for host-side CJS require (createRequire /
 //     require()) — intercepts Module._resolveFilename so a renamed dsh
 //     package resolves to its new name without plugin rebuilds.
@@ -16,6 +16,7 @@
 // custom dispose() is needed for v1's covered capabilities.
 import { LOG_PREFIX } from '../version.js';
 import { toNamespaceView, settingsErrorToResult } from '../services/settings.js';
+import type { CordisContext, AdapterFactory as Factory, HostAdapterConfig } from '../types.js';
 
 // Covers the real dsh release line (0.1.0-rc.x, verified against
 // dsh-upstream-fixes) and the anticipated 1.x line. The adapter name keeps
@@ -25,7 +26,7 @@ import { toNamespaceView, settingsErrorToResult } from '../services/settings.js'
 export const supports = '>=0.1.0-rc.1 <2.0.0';
 export const name = 'dsh-1-x';
 
-// Browser-facing bridge prefix; the client fetch interceptor (src/client.js)
+// Browser-facing bridge prefix; the client fetch interceptor (src/client.ts)
 // must use the same prefix.
 export const BRIDGE_PREFIX = '/api/dshloader';
 
@@ -38,48 +39,56 @@ export const BRIDGE_PREFIX = '/api/dshloader';
 // Module._resolveFilename; ESM static imports are build-time resolved and
 // cannot be intercepted at runtime (use pnpm overrides / tsconfig paths
 // for those).
-export const hostPackageAliases = {
+export const hostPackageAliases: Record<string, string> = {
   '@dsh-plugin/dsh-loader/tools': '@deepseek-ai/dsh-tools',
   '@dsh-plugin/dsh-loader/llm': '@deepseek-ai/dsh-llm',
   '@dsh-plugin/dsh-loader/agent': '@deepseek-ai/dsh-agent',
   '@dsh-plugin/dsh-loader/settings': '@deepseek-ai/dsh-settings',
 };
 
+/** Loosely-typed node:module NodeModule for the _resolveFilename hook. */
+interface NodeModuleLike {
+  _resolveFilename?: (...args: any[]) => string;
+}
+
 /**
  * Install a Module._resolveFilename hook that maps old package names to
  * new ones for CJS require() calls. Returns a dispose function that
  * removes the hook.
  */
-export async function installHostPackageAliases(aliases) {
+export async function installHostPackageAliases(
+  aliases: Record<string, string>,
+): Promise<() => void> {
   const entries = Object.entries(aliases);
   if (entries.length === 0) return () => {};
   const aliasMap = new Map(entries);
   // Lazy-import Module to avoid loading it in browser/test contexts.
-  let Module;
+  let Module: NodeModuleLike | undefined;
   try {
     const mod = await import('node:module');
-    Module = mod.default ?? mod.Module ?? mod;
+    const nodeModule = mod.default ?? mod.Module ?? mod;
+    Module = nodeModule as NodeModuleLike;
   } catch {
     return () => {};
   }
   if (!Module || typeof Module._resolveFilename !== 'function') return () => {};
   const original = Module._resolveFilename;
-  const hooked = function dshloaderResolve(request, parent, ...rest) {
+  const hooked = function dshloaderResolve(this: unknown, request: string, parent: unknown, ...rest: unknown[]) {
     const mapped = aliasMap.get(request);
     if (mapped !== undefined) return original.call(this, mapped, parent, ...rest);
     return original.call(this, request, parent, ...rest);
   };
   Module._resolveFilename = hooked;
   return () => {
-    if (Module._resolveFilename === hooked) Module._resolveFilename = original;
+    if (Module && Module._resolveFilename === hooked) Module._resolveFilename = original;
   };
 }
 
 /**
- * @param {object} ctx cordis context
- * @param {{ exposeAllNamespaces?: boolean, hostPackageAliases?: Record<string,string> }} [config]
+ * @param ctx cordis context
+ * @param config
  */
-export function create(ctx, config = {}) {
+export function create(ctx: CordisContext, config: HostAdapterConfig = {}): HostAdapterType {
   const exposeAllNamespaces = Boolean(config.exposeAllNamespaces);
   const packageAliases = { ...hostPackageAliases, ...(config.hostPackageAliases ?? {}) };
 
@@ -125,27 +134,34 @@ export function create(ctx, config = {}) {
   return { supports, name, apply, dispose };
 }
 
+interface HostAdapterType {
+  supports: string;
+  name: string;
+  apply: () => Promise<void>;
+  dispose: () => void;
+}
+
 /**
  * Register host bridge routes that the client fetch interceptor forwards
  * non-whitelisted settings requests to. Mirrors dsh-upstream-fixes/lib/index.js
  * `registerRoutes` (settings section).
  */
-function registerSettingsBridgeRoutes(ctx) {
+function registerSettingsBridgeRoutes(ctx: CordisContext): () => void {
   const webServer = ctx.get('webServer') ?? ctx.get('httpServer');
   if (webServer === undefined || typeof webServer.register !== 'function') return () => {};
   return webServer.register({
     kind: 'prefix',
     path: BRIDGE_PREFIX,
-    handler: (req, res) => {
-      const json = (status, body) => {
+    handler: (req: any, res: any) => {
+      const json = (status: number, body: unknown) => {
         res.statusCode = status;
         res.setHeader('content-type', 'application/json');
         res.end(JSON.stringify(body));
       };
       const readBody = () =>
-        new Promise((done, fail) => {
+        new Promise<string>((done, fail) => {
           let body = '';
-          req.on?.('data', (chunk) => {
+          req.on?.('data', (chunk: Buffer | string) => {
             body += chunk.toString('utf8');
           });
           req.on?.('end', () => done(body));
@@ -175,7 +191,7 @@ function registerSettingsBridgeRoutes(ctx) {
           const writeMatch = /^\/api\/dshloader\/settings\/(update|mutate|replace)$/.exec(path);
           if (method === 'POST' && writeMatch !== null) {
             const mode = writeMatch[1];
-            let parsed = {};
+            let parsed: { ns?: unknown; section?: unknown; ops?: unknown; expectedRevision?: number } = {};
             try {
               parsed = JSON.parse(await readBody());
             } catch {
@@ -215,7 +231,13 @@ function registerSettingsBridgeRoutes(ctx) {
   });
 }
 
-async function runSettingsWrite(settings, mode, ns, section, expectedRevision) {
+async function runSettingsWrite(
+  settings: any,
+  mode: string,
+  ns: string,
+  section: unknown,
+  expectedRevision?: number,
+) {
   if (settings === undefined) {
     return { ok: false, code: 'internal', message: 'settings service unavailable', details: {} };
   }
@@ -228,7 +250,7 @@ async function runSettingsWrite(settings, mode, ns, section, expectedRevision) {
   }
   const descriptor = settings
     .describe({ redactSecrets: true })
-    .find((d) => String(d.ns) === String(ns));
+    .find((d: { ns: unknown }) => String(d.ns) === String(ns));
   if (descriptor === undefined) {
     return { ok: false, code: 'internal', message: 'settings namespace disposed after write', details: { ns } };
   }

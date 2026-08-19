@@ -1,7 +1,7 @@
-// L2 module tests â€” client fetch interceptor (design.md Â§4.7, Â§5.3).
+// L2 module tests â€?client fetch interceptor (design.md Â§4.7, Â§5.3).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { installClient, installSettingsFetchInterceptor } from '../../src/client.js';
+import { installClient, installSettingsFetchInterceptor } from '../../dist/client.js';
 import { makeMockWindow } from '../helpers/mock.mjs';
 
 // Helper: a fake Response constructor that records body + status.
@@ -26,7 +26,7 @@ function makeWindowWithFetch(fetchImpl) {
   return win;
 }
 
-// TC-CLI-RPC-01: exposeAllNamespaces off â†’ settings.describe untouched.
+// TC-CLI-RPC-01: exposeAllNamespaces off â†?settings.describe untouched.
 test('TC-CLI-RPC-01 exposeAllNamespaces off leaves describe response untouched', async () => {
   const official = { result: { value: { namespaces: [{ ns: 'shell' }] } } };
   let fetchCalls = 0;
@@ -41,7 +41,7 @@ test('TC-CLI-RPC-01 exposeAllNamespaces off leaves describe response untouched',
   assert.equal(fetchCalls, 1); // no bridge call
 });
 
-// TC-CLI-RPC-01b: exposeAllNamespaces on â†’ bridge namespaces merged in.
+// TC-CLI-RPC-01b: exposeAllNamespaces on â†?bridge namespaces merged in.
 test('TC-CLI-RPC-01b exposeAllNamespaces on merges non-whitelisted namespaces', async () => {
   const official = { result: { value: { namespaces: [{ ns: 'shell' }] } } };
   const bridge = { ok: true, namespaces: [{ ns: 'task-board', schema: {}, value: {}, applies: {}, secrets: [], revision: 1 }] };
@@ -129,11 +129,11 @@ test('TC-CLI-RPC-02 non-target requests pass through to originalFetch', async ()
   assert.equal(body.echo, '/api/other');
 });
 
-// TC-BND-CLI-02: third party overrides window.fetch â†’ interceptor still wraps.
+// TC-BND-CLI-02: third party overrides window.fetch â†?interceptor still wraps.
 test('TC-BND-CLI-02 interceptor wraps original fetch when overwritten', async () => {
   const win = makeWindowWithFetch(async () => fakeResponse(JSON.stringify({ ok: true })));
   installClient({ window: win, exposeAllNamespaces: true });
-  // third party wraps the current (intercepted) fetch â€” describe still routed.
+  // third party wraps the current (intercepted) fetch â€?describe still routed.
   const official = { result: { value: { namespaces: [{ ns: 'shell' }] } } };
   const bridge = { ok: true, namespaces: [{ ns: 'task-board', schema: {}, value: {}, applies: {}, secrets: [], revision: 0 }] };
   const prevFetch = win.fetch;

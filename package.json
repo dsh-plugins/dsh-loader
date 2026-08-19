@@ -3,11 +3,11 @@
   "version": "1.1.0",
   "description": "Runtime compatibility shim for dsh (DeepSeek Harness) cordis bundle plugins: decouples third-party plugins from real dsh internal service names, module paths, and RPC details via a version-aware adapter registry.",
   "type": "module",
-  "main": "src/index.js",
+  "main": "dist/index.js",
   "exports": {
-    ".": "./src/index.js",
+    ".": "./dist/index.js",
     "./client": "./lib/client.js",
-    "./registry": "./src/registry.js",
+    "./registry": "./dist/registry.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json",
     "./ui-primitives": "./src/stable/ui-primitives.js",
@@ -25,7 +25,8 @@
     "dshloader": "./bin/dshloader.mjs"
   },
   "files": [
-    "src",
+    "dist",
+    "src/stable",
     "bin",
     "lib/client.js",
     "lib/client.js.map",
@@ -33,7 +34,10 @@
     "README.md"
   ],
   "scripts": {
+    "build": "tsc -p tsconfig.build.json && tsdown --config tsdown.client.config.mjs",
+    "build:host": "tsc -p tsconfig.build.json",
     "build:client": "tsdown --config tsdown.client.config.mjs",
+    "typecheck": "tsc --noEmit",
     "test": "node --test \"tests/**/*.test.mjs\"",
     "test:l1": "node --test \"tests/*.test.mjs\"",
     "test:l2": "node --test \"tests/module/*.test.mjs\"",
@@ -47,7 +51,10 @@
     "semver": "^7.8.5"
   },
   "devDependencies": {
-    "tsdown": "^0.22.2"
+    "@types/node": "^26.2.0",
+    "@types/semver": "^7.8.0",
+    "tsdown": "^0.22.2",
+    "typescript": "^7.0.2"
   },
   "dsh": {
     "bundle": {

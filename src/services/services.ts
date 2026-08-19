@@ -6,8 +6,10 @@
 // service (mirrors the adapter safety rule in design.md §5.1).
 
 import { LOG_PREFIX } from '../version.js';
+import type { CordisContext, ServicesAPI } from '../types.js';
 
-export function createServicesAPI({ ctx }) {
+export function createServicesAPI(opts: { ctx: CordisContext }): ServicesAPI {
+  const { ctx } = opts;
   return {
     get(name) {
       return ctx.get(name);

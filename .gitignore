@@ -3,6 +3,7 @@ node_modules/
 
 # Build output
 lib/
+dist/
 
 # Examples: better-sidebar lives in its own repo
 examples/dsh-better-sidebar-loader/

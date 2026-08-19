@@ -1,7 +1,7 @@
-// L2 module tests — client module redirection (design.md §4.6, §5.3, §5.4).
+// L2 module tests �?client module redirection (design.md §4.6, §5.3, §5.4).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { installClient, createClientAPI, ModuleNotFoundError } from '../../src/client.js';
+import { installClient, createClientAPI, ModuleNotFoundError } from '../../dist/client.js';
 import { makeMockWindow } from '../helpers/mock.mjs';
 
 // TC-CLI-MOD-01: deep source import path resolves to public entry via __ModuleLoader__.
@@ -30,7 +30,7 @@ test('TC-CLI-MOD-02 stable module name resolves through __dshLoader__.require', 
   assert.equal(mod.contextProvenance, 'impl:@deepseek-ai/dsh-client-runtime/client');
 });
 
-// TC-BND-CLI-01: no document → module aliases still register, no throw.
+// TC-BND-CLI-01: no document �?module aliases still register, no throw.
 test('TC-BND-CLI-01 non-browser env still registers module aliases', () => {
   const { window, moduleRegistry } = makeMockWindow({
     requireImpl: () => ({ contextProvenance: 'x' }),
@@ -41,7 +41,7 @@ test('TC-BND-CLI-01 non-browser env still registers module aliases', () => {
   assert.ok(moduleRegistry.has('@deepseek-ai/dsh-client-runtime/src/client/sessions/context-provenance.ts'));
 });
 
-// TC-BND-SEC-01: unknown / escape-path module specifier → ModuleNotFoundError.
+// TC-BND-SEC-01: unknown / escape-path module specifier �?ModuleNotFoundError.
 test('TC-BND-SEC-01 require unknown specifier throws ModuleNotFoundError', () => {
   const api = createClientAPI({ requireImpl: () => ({}) });
   assert.throws(
@@ -182,8 +182,8 @@ test('TC-PKG-04 stable @dsh-plugin/dsh-loader/* names map to real dsh packages',
     },
   };
 
-  // installClient with no opts.packageAliases — uses adapter defaults
-  // which include @dsh-plugin/dsh-loader/ui-primitives → @deepseek-ai/dsh-client-ui-primitives
+  // installClient with no opts.packageAliases �?uses adapter defaults
+  // which include @dsh-plugin/dsh-loader/ui-primitives �?@deepseek-ai/dsh-client-ui-primitives
   installClient({ window });
   requires.length = 0;
 

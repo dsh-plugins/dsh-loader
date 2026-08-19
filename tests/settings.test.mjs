@@ -1,7 +1,7 @@
-// L1 unit tests — Settings stable API (test-plan.md §4.2, §4.2b, §5.2, §6.1).
+// L1 unit tests �?Settings stable API (test-plan.md §4.2, §4.2b, §5.2, §6.1).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createSettingsAPI, DEFAULT_WEB_SETTINGS_NAMESPACES, toNamespaceView, settingsErrorToResult } from '../src/services/settings.js';
+import { createSettingsAPI, DEFAULT_WEB_SETTINGS_NAMESPACES, toNamespaceView, settingsErrorToResult } from '../dist/services/settings.js';
 import { makeMockCtx, makeMockSettings } from './helpers/mock.mjs';
 
 function ns(name, extra = {}) {
@@ -45,7 +45,7 @@ test('TC-SET-02 update writes and returns SettingsResult ok', async () => {
   assert.ok(result.value.revision > 0);
 });
 
-// TC-SET-03: settings service unavailable → internal error with dshloader prefix.
+// TC-SET-03: settings service unavailable �?internal error with dshloader prefix.
 test('TC-SET-03 settings unavailable returns internal error', async () => {
   const { ctx } = makeMockCtx();
   const api = createSettingsAPI({ ctx, exposeAllNamespaces: true });

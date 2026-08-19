@@ -1,7 +1,7 @@
-// L1 unit tests â€” AdapterRegistry version selection (design.md Â§4.5, Â§5.1).
+// L1 unit tests â€?AdapterRegistry version selection (design.md Â§4.5, Â§5.1).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AdapterRegistry, UnsupportedDshVersionError, InvalidVersionError } from '../src/registry.js';
+import { AdapterRegistry, UnsupportedDshVersionError, InvalidVersionError } from '../dist/registry.js';
 
 function adapter(supports, name = 'a-' + supports) {
   return { supports, name, create: () => ({ apply() {}, dispose() {} }) };
@@ -21,7 +21,7 @@ test('TC-REG-01 exact version match returns mode exact', () => {
   assert.equal(mode, 'exact');
 });
 
-// TC-REG-02: no exact match â†’ nearest-low fallback with warning.
+// TC-REG-02: no exact match â†?nearest-low fallback with warning.
 // NOTE: the test plan literally wrote `^1.0.0` for adapter A with version
 // `1.5.0`, but `^1.0.0` (= >=1.0.0 <2.0.0) *does* satisfy 1.5.0, which would
 // be a range match, not a fallback. To genuinely exercise the fallback path
@@ -43,7 +43,7 @@ test('TC-REG-02 no exact match falls back to nearest lower adapter', () => {
   }
 });
 
-// TC-REG-03: empty registry â†’ UnsupportedDshVersionError (too new).
+// TC-REG-03: empty registry â†?UnsupportedDshVersionError (too new).
 test('TC-REG-03 empty registry throws UnsupportedDshVersionError', () => {
   const reg = new AdapterRegistry();
   assert.throws(
@@ -52,7 +52,7 @@ test('TC-REG-03 empty registry throws UnsupportedDshVersionError', () => {
   );
 });
 
-// TC-REG-04: version below all adapters â†’ "too old" error, distinct message.
+// TC-REG-04: version below all adapters â†?"too old" error, distinct message.
 test('TC-REG-04 version too old throws distinct too-old error', () => {
   const reg = new AdapterRegistry();
   reg.register(adapter('>=1.0.0', 'A'));
@@ -75,20 +75,20 @@ test('TC-BND-REG-01 empty registry select throws', () => {
   assert.throws(() => reg.select('1.0.0'), UnsupportedDshVersionError);
 });
 
-// TC-BND-REG-02: invalid version string â†’ InvalidVersionError.
+// TC-BND-REG-02: invalid version string â†?InvalidVersionError.
 test('TC-BND-REG-02 invalid version throws InvalidVersionError', () => {
   const reg = new AdapterRegistry();
   reg.register(adapter('^1.0.0'));
   assert.throws(() => reg.select('not-a-version'), InvalidVersionError);
 });
 
-// TC-BND-REG-03: overlapping ranges â†’ narrowest wins; tie â†’ last registered.
+// TC-BND-REG-03: overlapping ranges â†?narrowest wins; tie â†?last registered.
 test('TC-BND-REG-03 narrowest overlapping range wins', () => {
   const reg = new AdapterRegistry();
   reg.register(adapter('>=1.0.0 <2.0.0', 'A'));
   reg.register(adapter('>=1.5.0 <2.0.0', 'B'));
   const { factory } = reg.select('1.6.0');
-  assert.equal(factory.name, 'B'); // B is a subset of A â†’ narrower
+  assert.equal(factory.name, 'B'); // B is a subset of A â†?narrower
 });
 
 test('TC-BND-REG-03 tie on identical ranges picks last registered', () => {
@@ -99,7 +99,7 @@ test('TC-BND-REG-03 tie on identical ranges picks last registered', () => {
   assert.equal(factory.name, 'B'); // last registered wins
 });
 
-// Additional: version newer than all bounded adapters â†’ fallback (rule 3),
+// Additional: version newer than all bounded adapters â†?fallback (rule 3),
 // NOT a too-new error. Per design.md Â§3.1 rule 3, when no exact/range hit
 // exists but some adapter only covers versions below the real one, the
 // nearest-low fallback applies. A too-new error (rule 5) only happens with an

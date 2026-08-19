@@ -1,10 +1,10 @@
-// L2 module tests — settings whitelist security warning (design.md §4.2b TC-SEC-03).
+// L2 module tests �?settings whitelist security warning (design.md §4.2b TC-SEC-03).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { apply } from '../../src/index.js';
+import { apply } from '../../dist/index.js';
 import { makeMockCtx, makeMockWebServer } from '../helpers/mock.mjs';
 
-// TC-SEC-03: exposeAllNamespaces=true → startup logs explicit security warning.
+// TC-SEC-03: exposeAllNamespaces=true �?startup logs explicit security warning.
 test('TC-SEC-03 exposeAllNamespaces true logs security warning', async () => {
   const { webServer } = makeMockWebServer();
   const { ctx, registerService } = makeMockCtx();
