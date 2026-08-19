@@ -1,8 +1,25 @@
+<div align="center">
+
+![Banner](./docs/banner.png)
+
 # dshloader
 
-[English](#english) | [中文](README.zh-CN.md)
+**A version-aware runtime compatibility shim that keeps third-party plugins working unchanged across dsh (DeepSeek Harness) upgrades.**
 
----
+[English](#english) | [简体中文](README.zh_CN.md)
+
+[![DSH Plugin](https://img.shields.io/badge/DeepSeek%20Harness-plugin-4f7cff)](https://github.com/topics/dsh-plugin)
+<a href="https://github.com/dsh-plugins/dsh-loader/actions/workflows/npm-publish.yml">
+  <img src="https://github.com/dsh-plugins/dsh-loader/actions/workflows/npm-publish.yml/badge.svg" alt="Build Status">
+</a>
+<a href="https://www.npmjs.com/package/@dsh-plugin/dsh-loader">
+  <img src="https://img.shields.io/npm/v/@dsh-plugin/dsh-loader.svg?sanitize=true" alt="Version">
+</a>
+<a href="https://www.npmjs.com/package/@dsh-plugin/dsh-loader">
+  <img src="https://img.shields.io/npm/l/@dsh-plugin/dsh-loader.svg?sanitize=true" alt="License">
+</a>
+
+</div>
 
 ## English
 

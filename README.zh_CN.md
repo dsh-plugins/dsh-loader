@@ -1,8 +1,25 @@
+<div align="center">
+
+![Banner](./docs/banner.png)
+
 # dshloader
 
-[English](README.md) | [中文](#中文)
+**面向 dsh（DeepSeek Harness）的版本感知运行时兼容层：通过适配器注册表，让第三方插件在 dsh 升级改版后无需改动即可继续工作。**
 
----
+[English](README.md) | [简体中文](#中文)
+
+[![DSH Plugin](https://img.shields.io/badge/DeepSeek%20Harness-plugin-4f7cff)](https://github.com/topics/dsh-plugin)
+<a href="https://github.com/dsh-plugins/dsh-loader/actions/workflows/npm-publish.yml">
+  <img src="https://github.com/dsh-plugins/dsh-loader/actions/workflows/npm-publish.yml/badge.svg" alt="Build Status">
+</a>
+<a href="https://www.npmjs.com/package/@dsh-plugin/dsh-loader">
+  <img src="https://img.shields.io/npm/v/@dsh-plugin/dsh-loader.svg?sanitize=true" alt="Version">
+</a>
+<a href="https://www.npmjs.com/package/@dsh-plugin/dsh-loader">
+  <img src="https://img.shields.io/npm/l/@dsh-plugin/dsh-loader.svg?sanitize=true" alt="License">
+</a>
+
+</div>
 
 ## 中文
 
