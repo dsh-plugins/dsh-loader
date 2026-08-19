@@ -1,6 +1,10 @@
 # Dependencies
 node_modules/
 
+# Lockfile: CI 设计为无锁文件安装（npm install），且本机生成的锁文件会
+# 混入工作区 pnpm store 的相对路径，禁止提交。
+package-lock.json
+
 # Build output
 lib/
 dist/
