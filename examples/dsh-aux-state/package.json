@@ -1,0 +1,26 @@
+{
+  "name": "dsh-aux-state-loader",
+  "version": "0.1.0",
+  "description": "dshloader-API transcription of @dsh-plugin/dsh-auxiliary's approve-state endpoint: reports whether the approve-for-me plugin is installed, reading only ctx.dshLoader (web/services/settings) instead of dsh internals.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "@dsh-external/dshloader": "^1.0.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "license": "MIT"
+}

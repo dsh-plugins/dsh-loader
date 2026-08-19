@@ -1,0 +1,9 @@
+# dsh-aux-state-loader bundle patch (loader-API transcription of
+# @dsh-plugin/dsh-auxiliary's approve-state endpoint).
+#
+# Applied as ONE insert over the profile root. `name` must equal the
+# package.json `name`; the loader resolves the plugin module from the
+# profile's node_modules under that name.
+- insert:
+    - id: dsh-aux-state-loader
+      name: dsh-aux-state-loader

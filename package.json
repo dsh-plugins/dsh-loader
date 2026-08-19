@@ -1,0 +1,59 @@
+{
+  "name": "@dsh-external/dshloader",
+  "version": "1.0.0",
+  "description": "Runtime compatibility shim for dsh (DeepSeek Harness) cordis bundle plugins: decouples third-party plugins from real dsh internal service names, module paths, and RPC details via a version-aware adapter registry.",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./lib/client.js",
+    "./registry": "./src/registry.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./ui-primitives": "./src/stable/ui-primitives.js",
+    "./ui-settings": "./src/stable/ui-settings.js",
+    "./ui-slots": "./src/stable/ui-slots.js",
+    "./web-react": "./src/stable/web-react.js",
+    "./schema-form": "./src/stable/schema-form.js",
+    "./runtime": "./src/stable/runtime.js",
+    "./tools": "./src/stable/tools.js",
+    "./llm": "./src/stable/llm.js",
+    "./agent": "./src/stable/agent.js",
+    "./settings": "./src/stable/settings.js"
+  },
+  "bin": {
+    "dshloader": "./bin/dshloader.mjs"
+  },
+  "files": [
+    "src",
+    "bin",
+    "lib/client.js",
+    "lib/client.js.map",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "scripts": {
+    "build:client": "tsdown --config tsdown.client.config.mjs",
+    "test": "node --test \"tests/**/*.test.mjs\"",
+    "test:l1": "node --test \"tests/*.test.mjs\"",
+    "test:l2": "node --test \"tests/module/*.test.mjs\"",
+    "test:l3": "node --test \"tests/integration/*.test.mjs\"",
+    "setup": "node bin/dshloader.mjs setup"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "semver": "^7.8.5"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "license": "BSD-3-Clause"
+}

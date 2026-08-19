@@ -1,0 +1,4 @@
+# Example plugin bundle patch.
+- insert:
+    - id: example-plugin
+      name: '@dsh-external/example-plugin'

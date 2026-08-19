@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build output
+lib/
+
+# Examples: better-sidebar lives in its own repo
+examples/dsh-better-sidebar-loader/
+
+# OS / editor
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Logs
+*.log

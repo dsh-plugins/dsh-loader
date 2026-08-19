@@ -1,0 +1,8 @@
+# dsh bundle patch: mounts dshloader into a profile's cordis layer stack.
+# Position in the `insert` list does NOT affect whether service aliases /
+# module redirects take effect — cordis is reactive dependency injection,
+# so downstream plugins declaring `inject: [...]` stay PENDING until the
+# alias is provided, regardless of file order. See docs/design.md §1.2/§6.2.
+- insert:
+    - id: dshloader
+      name: '@dsh-external/dshloader'
