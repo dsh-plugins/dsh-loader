@@ -224,4 +224,4 @@ Node.js >= 18，`node --test`，无额外测试框架。
 
 ### 许可证
 
-BSD-3-Clause
+LGPL-3.0-only（GNU 宽通用公共许可证第 3 版）。参见 [LICENSE](./LICENSE)。

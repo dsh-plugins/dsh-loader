@@ -248,4 +248,4 @@ Node.js >= 18, `node --test`, no extra test framework.
 
 ### License
 
-BSD-3-Clause
+LGPL-3.0-only (GNU Lesser General Public License v3 only). See [LICENSE](./LICENSE).

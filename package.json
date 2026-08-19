@@ -35,7 +35,8 @@
     "lib/client.js",
     "lib/client.js.map",
     "cordis.patch.yml",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && tsdown --config tsdown.client.config.mjs",
@@ -70,5 +71,5 @@
       "immediately": true
     }
   },
-  "license": "BSD-3-Clause"
+  "license": "LGPL-3.0-only"
 }
