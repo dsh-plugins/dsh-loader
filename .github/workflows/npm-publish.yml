@@ -4,8 +4,12 @@
 #   - 本仓库不提交锁文件，因此用 `npm install` 代替 `npm ci`，也不使用
 #     setup-node 的 npm 缓存（缓存依赖锁文件）。
 #   - dsh-loader 没有 typecheck 脚本：质量门禁改用 `npm test`。
+#     测试用例从 ../dist/*.js 导入编译产物，而 dist/ 是 gitignored 的，
+#     因此 package.json 里的 `pretest` 会先执行 `build:host`（tsc）生成 dist。
 #   - 客户端 bundle 由 tsdown 构建（`npm run build:client`），tsdown 已加入
 #     devDependencies，干净环境安装后即可构建 lib/client.js。
+#   - 发布时需先执行完整 `npm run build`（tsc 生成 dist + tsdown 生成 lib），
+#     否则发布的 tarball 会缺少 package.json main 指向的 dist/index.js。
 #   - 发布规则与参考一致：推送 main 发布 -dev.<run-id>（dist-tag=next），
 #     打 vX.Y.Z 标签发布正式版（dist-tag=latest，要求标签名与版本号完全一致）。
 name: CI and npm Publish
@@ -115,8 +119,8 @@ jobs:
           echo "package_name=$PACKAGE_NAME" >> "$GITHUB_OUTPUT"
           echo "version=$PUBLISH_VERSION" >> "$GITHUB_OUTPUT"
           echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
-      - name: Build client bundle
-        run: npm run build:client
+      - name: Build (dist + client bundle)
+        run: npm run build
       - name: Inspect npm package contents
         run: npm pack --dry-run
       - name: Check whether the version already exists
