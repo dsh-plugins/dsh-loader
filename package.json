@@ -46,6 +46,9 @@
   "dependencies": {
     "semver": "^7.8.5"
   },
+  "devDependencies": {
+    "tsdown": "^0.22.2"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
