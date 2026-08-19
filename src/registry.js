@@ -161,7 +161,7 @@ export class AdapterRegistry {
     }
     if (this.adapters.length === 0) {
       throw new UnsupportedDshVersionError(
-        `${LOG_PREFIX} no adapter registered for dsh ${version}; please upgrade @dsh-external/dshloader`,
+        `${LOG_PREFIX} no adapter registered for dsh ${version}; please upgrade @dsh-plugin/dsh-loader`,
         { kind: 'too-new', version },
       );
     }
@@ -235,7 +235,7 @@ export class AdapterRegistry {
       }
     }
     throw new UnsupportedDshVersionError(
-      `${LOG_PREFIX} no adapter covers dsh ${version}; please upgrade @dsh-external/dshloader`,
+      `${LOG_PREFIX} no adapter covers dsh ${version}; please upgrade @dsh-plugin/dsh-loader`,
       { kind: 'too-new', version },
     );
   }

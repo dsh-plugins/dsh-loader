@@ -1,2 +1,2 @@
-// Stable re-export: @dsh-external/dshloader/agent
+// Stable re-export: @dsh-plugin/dsh-loader/agent
 export * from '@deepseek-ai/dsh-agent';

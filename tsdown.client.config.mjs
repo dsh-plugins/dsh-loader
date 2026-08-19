@@ -3,7 +3,7 @@
  *
  * dsh's client-modules requires every client bundle to register itself via
  * window.__ModuleLoader__.load({ id: "<package-name>", factory }) — a plain
- * ESM entry (src/client.js) loaded at /plugins/@dsh-external/dshloader/client.js
+ * ESM entry (src/client.js) loaded at /plugins/@dsh-plugin/dsh-loader/client.js
  * would otherwise fail with "loaded without registering ... via
  * __ModuleLoader__.load" and take down the whole client plugin boot.
  *
@@ -26,7 +26,7 @@ export default {
   },
   outputOptions: {
     entryFileNames: 'client.js',
-    banner: 'window.__ModuleLoader__.load({ id: "@dsh-external/dshloader", factory: (require) => {',
+    banner: 'window.__ModuleLoader__.load({ id: "@dsh-plugin/dsh-loader", factory: (require) => {',
     footer: 'return module.exports; } });',
     intro: 'var module = { exports: {} }; var exports = module.exports;',
     codeSplitting: false,

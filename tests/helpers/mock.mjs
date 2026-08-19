@@ -153,13 +153,13 @@ export function makeTempProfile({ dshVersion, manifest } = {}) {
       manifest ?? {
         name: '@dsh/profile-web-test',
         version: '1.0.0',
-        dependencies: { '@dsh-external/dshloader': 'file:../../..' },
+        dependencies: { '@dsh-plugin/dsh-loader': 'file:../../..' },
       },
       undefined,
       2,
     ),
   );
-  writeFileSync(join(profileDir, 'cordis.patch.yml'), "- insert:\n    - id: dshloader\n      name: '@dsh-external/dshloader'\n");
+  writeFileSync(join(profileDir, 'cordis.patch.yml'), "- insert:\n    - id: dsh-loader\n      name: '@dsh-plugin/dsh-loader'\n");
   return {
     root,
     home,

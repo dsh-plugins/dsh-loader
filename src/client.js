@@ -323,7 +323,7 @@ export function installSettingsFetchInterceptor(win, bridgePrefix = BRIDGE_PREFI
 // `installClient` mounts window.__dshLoader__, registers module aliases,
 // wires the client cordis ctx for `services.get`, and (when opted in)
 // installs the settings fetch interceptor.
-export const name = 'dshloader'
+export const name = '@dsh-plugin/dsh-loader'
 export const inject = []
 export function apply(ctx) {
   if (typeof window !== 'undefined') installClient({ window, clientCtx: ctx });

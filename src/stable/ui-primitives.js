@@ -1,4 +1,4 @@
-// Stable re-export: @dsh-external/dshloader/ui-primitives
+// Stable re-export: @dsh-plugin/dsh-loader/ui-primitives
 //
 // Plugins import UI primitives from this subpath instead of directly
 // from @deepseek-ai/dsh-client-ui-primitives. When dsh renames the

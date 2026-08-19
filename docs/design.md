@@ -78,15 +78,15 @@ dshloader 是一个 **运行时兼容中间层**，目标是把插件与真实 d
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │ cordis.patch.yml                                      │  │
 │  │   - insert:                                           │  │
-│  │       - id: dshloader           ← 位次不影响生效      │  │
-│  │         name: '@dsh-external/dshloader'               │  │
+│  │       - id: dsh-loader           ← 位次不影响生效      │  │
+│  │         name: '@dsh-plugin/dsh-loader'               │  │
 │  │       - id: plugin-a                                  │  │
 │  │       - id: plugin-b                                  │  │
 │  └───────────────────────────────────────────────────────┘  │
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │ package.json                                          │  │
 │  │   dependencies:                                         │  │
-│  │     @dsh-external/dshloader: '^1.0.0'                  │  │
+│  │     @dsh-plugin/dsh-loader: '^1.0.0'                  │  │
 │  │     plugin-a: '^x.x.x'                                 │  │
 │  └───────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
@@ -300,11 +300,11 @@ dshloader 的 client adapter 在启动时读取 `moduleAliases` 表，批量注�
 
 dshloader 提供 CLI 命令和程序化 API，把自身写入目标 profile：
 
-- 把 `@dsh-external/dshloader` 加入 `package.json` 的 `dependencies`（若不存在）。
+- 把 `@dsh-plugin/dsh-loader` 加入 `package.json` 的 `dependencies`（若不存在）。
 - 在 `cordis.patch.yml` 的 `insert` 列表最前面插入 dshloader patch。
 - 不修改其他插件顺序，不覆盖用户自定义的 `disabled` 配置。
 
-升级 dshloader 时只需执行 `pnpm update @dsh-external/dshloader`；dsh 升级后，由新版 dshloader 的适配器承担新兼容逻辑，插件无需改动。
+升级 dshloader 时只需执行 `pnpm update @dsh-plugin/dsh-loader`；dsh 升级后，由新版 dshloader 的适配器承担新兼容逻辑，插件无需改动。
 
 ## 4. 接口定义
 
@@ -464,7 +464,7 @@ interface ClientAdapter {
 - dshloader 自身版本遵循 semver。
 - 适配器 `supports` 字段使用 npm semver 范围语法。
 - 稳定 API 的 major 版本与 dshloader 的 major 版本对齐；minor 新增能力，patch 修复 bug。
-- 插件在 `package.json` 中可声明 `peerDependency`：`@dsh-external/dshloader: '^1.0.0'`，但运行时仍通过 cordis 上下文访问，不强制 npm 依赖。
+- 插件在 `package.json` 中可声明 `peerDependency`：`@dsh-plugin/dsh-loader: '^1.0.0'`，但运行时仍通过 cordis 上下文访问，不强制 npm 依赖。
 
 ## 5. 兼容适配策略
 
@@ -588,7 +588,7 @@ window.fetch = async function (input, init) {
 2. 在注册表中声明 `supports: '>=3.0.0 <3.1.0'`。
 3. 编写对应的单元测试和集成测试。
 4. 发布 dshloader 新版本。
-5. 用户/CI 在 profile 中 `pnpm update @dsh-external/dshloader` 并重启 dsh web。
+5. 用户/CI 在 profile 中 `pnpm update @dsh-plugin/dsh-loader` 并重启 dsh web。
 
 插件代码无需改动。
 
@@ -606,7 +606,7 @@ dsh plugin --profile web add /path/to/dshloader
 dsh plugin --profile web add https://github.com/dsh-external/dshloader.git
 
 # 从 npm 安装（发布后）
-dsh plugin --profile web add @dsh-external/dshloader@^1.0.0
+dsh plugin --profile web add @dsh-plugin/dsh-loader@^1.0.0
 ```
 
 执行后，dsh 会自动：
@@ -643,7 +643,7 @@ dsh --profile web --dump-config
 
 ```bash
 cd ~/.dsh/profiles/web
-pnpm update @dsh-external/dshloader
+pnpm update @dsh-plugin/dsh-loader
 ```
 
 然后重启 dsh web。
@@ -651,7 +651,7 @@ pnpm update @dsh-external/dshloader
 ### 6.5 移除
 
 ```bash
-dsh plugin --profile web rm @dsh-external/dshloader
+dsh plugin --profile web rm @dsh-plugin/dsh-loader
 ```
 
 移除后，依赖 dshloader 稳定 API 的插件会报错，需要在移除前确认这些插件已迁移到原生 dsh API 或有其它兼容方案。
@@ -746,8 +746,8 @@ dshloader/
 
 ```yaml
 insert:
-  - id: dshloader
-    name: '@dsh-external/dshloader'
+  - id: dsh-loader
+    name: '@dsh-plugin/dsh-loader'
     disabled: true
 ```
 
@@ -757,7 +757,7 @@ insert:
 
 ```bash
 cd ~/.dsh/profiles/web
-pnpm install @dsh-external/dshloader@1.0.0
+pnpm install @dsh-plugin/dsh-loader@1.0.0
 ```
 
 #### 回滚 dsh 版本

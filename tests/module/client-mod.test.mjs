@@ -163,9 +163,9 @@ test('TC-PKG-03 unmapped package names pass through unchanged', () => {
   assert.equal(window.__loaded['test-plugin-2'].react.version, '18');
 });
 
-// TC-PKG-04: stable @dsh-external/dshloader/* subpaths map to real dsh
+// TC-PKG-04: stable @dsh-plugin/dsh-loader/* subpaths map to real dsh
 // package names via the adapter's default packageAliases.
-test('TC-PKG-04 stable @dsh-external/dshloader/* names map to real dsh packages', () => {
+test('TC-PKG-04 stable @dsh-plugin/dsh-loader/* names map to real dsh packages', () => {
   const requires = [];
   const { window } = makeMockWindow();
   const moduleTable = new Map();
@@ -183,14 +183,14 @@ test('TC-PKG-04 stable @dsh-external/dshloader/* names map to real dsh packages'
   };
 
   // installClient with no opts.packageAliases — uses adapter defaults
-  // which include @dsh-external/dshloader/ui-primitives → @deepseek-ai/dsh-client-ui-primitives
+  // which include @dsh-plugin/dsh-loader/ui-primitives → @deepseek-ai/dsh-client-ui-primitives
   installClient({ window });
   requires.length = 0;
 
   window.__ModuleLoader__.load({
     id: 'test-plugin-stable',
     factory: (require) => {
-      const mod = require('@dsh-external/dshloader/ui-primitives');
+      const mod = require('@dsh-plugin/dsh-loader/ui-primitives');
       return { icon: mod };
     },
   });

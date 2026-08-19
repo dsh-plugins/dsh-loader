@@ -39,10 +39,10 @@ export const BRIDGE_PREFIX = '/api/dshloader';
 // cannot be intercepted at runtime (use pnpm overrides / tsconfig paths
 // for those).
 export const hostPackageAliases = {
-  '@dsh-external/dshloader/tools': '@deepseek-ai/dsh-tools',
-  '@dsh-external/dshloader/llm': '@deepseek-ai/dsh-llm',
-  '@dsh-external/dshloader/agent': '@deepseek-ai/dsh-agent',
-  '@dsh-external/dshloader/settings': '@deepseek-ai/dsh-settings',
+  '@dsh-plugin/dsh-loader/tools': '@deepseek-ai/dsh-tools',
+  '@dsh-plugin/dsh-loader/llm': '@deepseek-ai/dsh-llm',
+  '@dsh-plugin/dsh-loader/agent': '@deepseek-ai/dsh-agent',
+  '@dsh-plugin/dsh-loader/settings': '@deepseek-ai/dsh-settings',
 };
 
 /**

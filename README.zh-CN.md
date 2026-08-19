@@ -19,7 +19,7 @@ dsh 迭代很快，内部 API 在版本间会变：
 - 客户端 UI 包如 `@deepseek-ai/dsh-client-ui-primitives` 在未来 dsh 版本中可能改名，直接 import 的插件全部会坏。
 - 官方 `dsh-host-apiproxy` 硬编码了 settings namespace 白名单，第三方设置卡片无法出现在 Web UI 中。
 
-dshloader 把这些（以及未来的）破坏性变更吸收到**稳定 API** 后面：host 侧的 `ctx.dshLoader`、浏览器侧的 `window.__dshLoader__`、以及包导入的 `@dsh-external/dshloader/*` 稳定 subpath。
+dshloader 把这些（以及未来的）破坏性变更吸收到**稳定 API** 后面：host 侧的 `ctx.dshLoader`、浏览器侧的 `window.__dshLoader__`、以及包导入的 `@dsh-plugin/dsh-loader/*` 稳定 subpath。
 
 ### 快速上手
 
@@ -36,7 +36,7 @@ DSH_HOME=~/.dsh npx dshloader setup <name>
 ```json
 {
   "dependencies": {
-    "@dsh-external/dshloader": "link:..."
+    "@dsh-plugin/dsh-loader": "link:..."
   }
 }
 ```
@@ -65,26 +65,26 @@ export async function apply(ctx) {
 
 ```js
 // Host 包
-const { defineTool } = require('@dsh-external/dshloader/tools');
+const { defineTool } = require('@dsh-plugin/dsh-loader/tools');
 
 // Client UI 包（在 client bundle 源码中）
-import { IconCloseFill14 } from '@dsh-external/dshloader/ui-primitives';
+import { IconCloseFill14 } from '@dsh-plugin/dsh-loader/ui-primitives';
 ```
 
 **稳定 subpath → dsh 真实包名映射（dsh 1.x）：**
 
 | 稳定 subpath | dsh 真实包名 |
 |---|---|
-| `@dsh-external/dshloader/tools` | `@deepseek-ai/dsh-tools` |
-| `@dsh-external/dshloader/llm` | `@deepseek-ai/dsh-llm` |
-| `@dsh-external/dshloader/agent` | `@deepseek-ai/dsh-agent` |
-| `@dsh-external/dshloader/settings` | `@deepseek-ai/dsh-settings` |
-| `@dsh-external/dshloader/ui-primitives` | `@deepseek-ai/dsh-client-ui-primitives` |
-| `@dsh-external/dshloader/ui-slots` | `@deepseek-ai/dsh-client-ui-slots` |
-| `@dsh-external/dshloader/ui-settings` | `@deepseek-ai/dsh-client-ui-settings/client` |
-| `@dsh-external/dshloader/web-react` | `@deepseek-ai/dsh-client-web-react` |
-| `@dsh-external/dshloader/schema-form` | `@deepseek-ai/dsh-client-schema-form` |
-| `@dsh-external/dshloader/runtime` | `@deepseek-ai/dsh-client-runtime/client` |
+| `@dsh-plugin/dsh-loader/tools` | `@deepseek-ai/dsh-tools` |
+| `@dsh-plugin/dsh-loader/llm` | `@deepseek-ai/dsh-llm` |
+| `@dsh-plugin/dsh-loader/agent` | `@deepseek-ai/dsh-agent` |
+| `@dsh-plugin/dsh-loader/settings` | `@deepseek-ai/dsh-settings` |
+| `@dsh-plugin/dsh-loader/ui-primitives` | `@deepseek-ai/dsh-client-ui-primitives` |
+| `@dsh-plugin/dsh-loader/ui-slots` | `@deepseek-ai/dsh-client-ui-slots` |
+| `@dsh-plugin/dsh-loader/ui-settings` | `@deepseek-ai/dsh-client-ui-settings/client` |
+| `@dsh-plugin/dsh-loader/web-react` | `@deepseek-ai/dsh-client-web-react` |
+| `@dsh-plugin/dsh-loader/schema-form` | `@deepseek-ai/dsh-client-schema-form` |
+| `@dsh-plugin/dsh-loader/runtime` | `@deepseek-ai/dsh-client-runtime/client` |
 
 dsh 改包名时，只需改 dshloader 适配器——插件源码和 bundle 不用动。
 
@@ -103,12 +103,12 @@ window.__dshLoader__.registerPackageAlias('@old/pkg', '@new/pkg');
 ```ts
 const CLIENT_EXTERNALS = [
   'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', 'cordis',
-  '@dsh-external/dshloader/ui-primitives',
-  '@dsh-external/dshloader/ui-slots',
-  '@dsh-external/dshloader/ui-settings',
-  '@dsh-external/dshloader/web-react',
-  '@dsh-external/dshloader/schema-form',
-  '@dsh-external/dshloader/runtime',
+  '@dsh-plugin/dsh-loader/ui-primitives',
+  '@dsh-plugin/dsh-loader/ui-slots',
+  '@dsh-plugin/dsh-loader/ui-settings',
+  '@dsh-plugin/dsh-loader/web-react',
+  '@dsh-plugin/dsh-loader/schema-form',
+  '@dsh-plugin/dsh-loader/runtime',
 ]
 ```
 
@@ -120,7 +120,7 @@ plugin ──▶ ctx.dshLoader.{settings,web,services} ──▶ dshloader 适�
                                                         ▼
                                               真实 dsh（当前版本）
 
-plugin bundle ──▶ require('@dsh-external/dshloader/ui-primitives')
+plugin bundle ──▶ require('@dsh-plugin/dsh-loader/ui-primitives')
                         │
                         ▼（__ModuleLoader__ wrapper 映射稳定名）
                   require('@deepseek-ai/dsh-client-ui-primitives')
@@ -155,7 +155,7 @@ dshloader info [profile]         打印 loader 版本、探测到的 dsh 版本�
 ### 回滚 / 禁用
 
 - 单次启动禁用：`DSHLOADER_DISABLE=1 dsh web`
-- 移除：`dsh plugin --profile <name> rm @dsh-external/dshloader`
+- 移除：`dsh plugin --profile <name> rm @dsh-plugin/dsh-loader`
 
 ### 项目结构
 

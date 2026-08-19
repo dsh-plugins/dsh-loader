@@ -1,2 +1,2 @@
-// Stable re-export: @dsh-external/dshloader/llm
+// Stable re-export: @dsh-plugin/dsh-loader/llm
 export * from '@deepseek-ai/dsh-llm';

@@ -174,9 +174,9 @@ test('TC-HOST-PKG-02 empty host package aliases is no-op', async () => {
   dispose(); // should not throw
 });
 
-// TC-HOST-PKG-03: stable @dsh-external/dshloader/* subpaths map to real
+// TC-HOST-PKG-03: stable @dsh-plugin/dsh-loader/* subpaths map to real
 // dsh package names via the adapter's default hostPackageAliases.
-test('TC-HOST-PKG-03 stable @dsh-external/dshloader/* maps to real dsh packages', async () => {
+test('TC-HOST-PKG-03 stable @dsh-plugin/dsh-loader/* maps to real dsh packages', async () => {
   const Module = await import('node:module').then((m) => m.default ?? m.Module ?? m);
   const original = Module._resolveFilename;
   const resolved = [];
@@ -187,9 +187,9 @@ test('TC-HOST-PKG-03 stable @dsh-external/dshloader/* maps to real dsh packages'
   try {
     const { hostPackageAliases } = await import('../src/adapters/dsh-1-x.js');
     const dispose = await installHostPackageAliases(hostPackageAliases);
-    Module._resolveFilename('@dsh-external/dshloader/tools');
-    Module._resolveFilename('@dsh-external/dshloader/llm');
-    Module._resolveFilename('@dsh-external/dshloader/agent');
+    Module._resolveFilename('@dsh-plugin/dsh-loader/tools');
+    Module._resolveFilename('@dsh-plugin/dsh-loader/llm');
+    Module._resolveFilename('@dsh-plugin/dsh-loader/agent');
     assert.deepEqual(resolved, [
       '@deepseek-ai/dsh-tools',
       '@deepseek-ai/dsh-llm',

@@ -48,7 +48,7 @@ test('TC-REG-03 empty registry throws UnsupportedDshVersionError', () => {
   const reg = new AdapterRegistry();
   assert.throws(
     () => reg.select('9.9.9'),
-    (err) => err instanceof UnsupportedDshVersionError && /upgrade @dsh-external\/dshloader/.test(err.message),
+    (err) => err instanceof UnsupportedDshVersionError && /upgrade @dsh-plugin\/dsh-loader/.test(err.message),
   );
 });
 

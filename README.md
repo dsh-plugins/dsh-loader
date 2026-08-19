@@ -29,7 +29,7 @@ dsh is moving fast and its internal surface changes between releases:
 
 dshloader absorbs these (and future) breaks behind a **stable API**:
 `ctx.dshLoader` on the host, `window.__dshLoader__` in the browser, and
-`@dsh-external/dshloader/*` stable subpaths for package imports.
+`@dsh-plugin/dsh-loader/*` stable subpaths for package imports.
 
 ### Quick start
 
@@ -46,7 +46,7 @@ DSH_HOME=~/.dsh npx dshloader setup <name>
 ```json
 {
   "dependencies": {
-    "@dsh-external/dshloader": "link:..."
+    "@dsh-plugin/dsh-loader": "link:..."
   }
 }
 ```
@@ -76,26 +76,26 @@ export async function apply(ctx) {
 
 ```js
 // Host packages
-const { defineTool } = require('@dsh-external/dshloader/tools');
+const { defineTool } = require('@dsh-plugin/dsh-loader/tools');
 
 // Client UI packages (in client bundle source)
-import { IconCloseFill14 } from '@dsh-external/dshloader/ui-primitives';
+import { IconCloseFill14 } from '@dsh-plugin/dsh-loader/ui-primitives';
 ```
 
 **Stable subpath → real dsh package mapping (dsh 1.x):**
 
 | Stable subpath | Real dsh package |
 |---|---|
-| `@dsh-external/dshloader/tools` | `@deepseek-ai/dsh-tools` |
-| `@dsh-external/dshloader/llm` | `@deepseek-ai/dsh-llm` |
-| `@dsh-external/dshloader/agent` | `@deepseek-ai/dsh-agent` |
-| `@dsh-external/dshloader/settings` | `@deepseek-ai/dsh-settings` |
-| `@dsh-external/dshloader/ui-primitives` | `@deepseek-ai/dsh-client-ui-primitives` |
-| `@dsh-external/dshloader/ui-slots` | `@deepseek-ai/dsh-client-ui-slots` |
-| `@dsh-external/dshloader/ui-settings` | `@deepseek-ai/dsh-client-ui-settings/client` |
-| `@dsh-external/dshloader/web-react` | `@deepseek-ai/dsh-client-web-react` |
-| `@dsh-external/dshloader/schema-form` | `@deepseek-ai/dsh-client-schema-form` |
-| `@dsh-external/dshloader/runtime` | `@deepseek-ai/dsh-client-runtime/client` |
+| `@dsh-plugin/dsh-loader/tools` | `@deepseek-ai/dsh-tools` |
+| `@dsh-plugin/dsh-loader/llm` | `@deepseek-ai/dsh-llm` |
+| `@dsh-plugin/dsh-loader/agent` | `@deepseek-ai/dsh-agent` |
+| `@dsh-plugin/dsh-loader/settings` | `@deepseek-ai/dsh-settings` |
+| `@dsh-plugin/dsh-loader/ui-primitives` | `@deepseek-ai/dsh-client-ui-primitives` |
+| `@dsh-plugin/dsh-loader/ui-slots` | `@deepseek-ai/dsh-client-ui-slots` |
+| `@dsh-plugin/dsh-loader/ui-settings` | `@deepseek-ai/dsh-client-ui-settings/client` |
+| `@dsh-plugin/dsh-loader/web-react` | `@deepseek-ai/dsh-client-web-react` |
+| `@dsh-plugin/dsh-loader/schema-form` | `@deepseek-ai/dsh-client-schema-form` |
+| `@dsh-plugin/dsh-loader/runtime` | `@deepseek-ai/dsh-client-runtime/client` |
 
 When dsh renames a package, only the dshloader adapter changes — plugin
 source and bundle stay the same.
@@ -115,12 +115,12 @@ window.__dshLoader__.registerPackageAlias('@old/pkg', '@new/pkg');
 ```ts
 const CLIENT_EXTERNALS = [
   'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', 'cordis',
-  '@dsh-external/dshloader/ui-primitives',
-  '@dsh-external/dshloader/ui-slots',
-  '@dsh-external/dshloader/ui-settings',
-  '@dsh-external/dshloader/web-react',
-  '@dsh-external/dshloader/schema-form',
-  '@dsh-external/dshloader/runtime',
+  '@dsh-plugin/dsh-loader/ui-primitives',
+  '@dsh-plugin/dsh-loader/ui-slots',
+  '@dsh-plugin/dsh-loader/ui-settings',
+  '@dsh-plugin/dsh-loader/web-react',
+  '@dsh-plugin/dsh-loader/schema-form',
+  '@dsh-plugin/dsh-loader/runtime',
 ]
 ```
 
@@ -132,7 +132,7 @@ plugin ──▶ ctx.dshLoader.{settings,web,services} ──▶ dshloader adapt
                                                          ▼
                                                real dsh (current version)
 
-plugin bundle ──▶ require('@dsh-external/dshloader/ui-primitives')
+plugin bundle ──▶ require('@dsh-plugin/dsh-loader/ui-primitives')
                          │
                          ▼ (__ModuleLoader__ wrapper maps stable name)
                    require('@deepseek-ai/dsh-client-ui-primitives')
@@ -179,7 +179,7 @@ dshloader info [profile]         Print loader version, detected dsh version,
 ### Rollback / disable
 
 - Disable per launch: `DSHLOADER_DISABLE=1 dsh web`
-- Remove: `dsh plugin --profile <name> rm @dsh-external/dshloader`
+- Remove: `dsh plugin --profile <name> rm @dsh-plugin/dsh-loader`
 
 ### Project layout
 

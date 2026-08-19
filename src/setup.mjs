@@ -1,7 +1,7 @@
 // One-shot profile injection script (design.md §3.6 / §6 / M6).
 //
 // `dshloader setup <profile>`:
-//   - adds `@dsh-external/dshloader` to the profile package.json dependencies
+//   - adds `@dsh-plugin/dsh-loader` to the profile package.json dependencies
 //     (if missing);
 //   - appends the dshloader `insert` entry to cordis.patch.yml (if missing);
 //   - does NOT reorder the insert list — cordis is reactive DI, so position
@@ -20,8 +20,8 @@ import { LOADER_VERSION, LOG_PREFIX } from './version.js';
 import { detectDshVersion, AdapterRegistry, UnsupportedDshVersionError } from './registry.js';
 import { registerHostAdapters } from './adapters/index.js';
 
-const LOADER_PKG = '@dsh-external/dshloader';
-const PATCH_ENTRY = `- id: dshloader\n      name: '${LOADER_PKG}'`;
+const LOADER_PKG = '@dsh-plugin/dsh-loader';
+const PATCH_ENTRY = `- id: dsh-loader\n      name: '${LOADER_PKG}'`;
 
 export function dshHome() {
   const env = process.env.DSH_HOME?.trim();
@@ -64,7 +64,7 @@ export function injectPatch(patchPath) {
   } catch {
     text = '';
   }
-  if (text.includes("id: dshloader")) {
+  if (text.includes("id: dsh-loader")) {
     return { added: false, text };
   }
   const insertion = `- insert:\n    ${PATCH_ENTRY}\n`;

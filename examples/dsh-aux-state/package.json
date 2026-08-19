@@ -15,7 +15,7 @@
     "README.md"
   ],
   "peerDependencies": {
-    "@dsh-external/dshloader": "^1.0.0"
+    "@dsh-plugin/dsh-loader": "^1.0.0"
   },
   "dsh": {
     "bundle": {

@@ -4,5 +4,5 @@
 # so downstream plugins declaring `inject: [...]` stay PENDING until the
 # alias is provided, regardless of file order. See docs/design.md §1.2/§6.2.
 - insert:
-    - id: dshloader
-      name: '@dsh-external/dshloader'
+    - id: dsh-loader
+      name: '@dsh-plugin/dsh-loader'

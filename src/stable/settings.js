@@ -1,2 +1,2 @@
-// Stable re-export: @dsh-external/dshloader/settings
+// Stable re-export: @dsh-plugin/dsh-loader/settings
 export * from '@deepseek-ai/dsh-settings';

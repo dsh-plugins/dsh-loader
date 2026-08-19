@@ -2,7 +2,7 @@
 
 > 版本：1.0.0 · 对应 `docs/design.md §4` 接口定义
 > 本文档描述 dshloader 对外暴露的全部稳定 API、适配器实现接口、CLI、错误类型与数据结构。
-> 所有 API 均以 ESM 导出，模块路径相对于包根 `@dsh-external/dshloader`。
+> 所有 API 均以 ESM 导出，模块路径相对于包根 `@dsh-plugin/dsh-loader`。
 
 ---
 
@@ -21,7 +21,7 @@ DSH_HOME=~/.dsh npx dshloader setup <name>
 ```json
 {
   "dependencies": {
-    "@dsh-external/dshloader": "link:..."
+    "@dsh-plugin/dsh-loader": "link:..."
   }
 }
 ```
@@ -54,46 +54,46 @@ export async function apply(ctx) {
 const { defineTool } = require('@deepseek-ai/dsh-tools');
 
 // ✅ 用 dshloader 的稳定 subpath
-const { defineTool } = require('@dsh-external/dshloader/tools');
+const { defineTool } = require('@dsh-plugin/dsh-loader/tools');
 ```
 
 | 稳定 subpath | dsh 1.x 真实包名 |
 |---|---|
-| `@dsh-external/dshloader/tools` | `@deepseek-ai/dsh-tools` |
-| `@dsh-external/dshloader/llm` | `@deepseek-ai/dsh-llm` |
-| `@dsh-external/dshloader/agent` | `@deepseek-ai/dsh-agent` |
-| `@dsh-external/dshloader/settings` | `@deepseek-ai/dsh-settings` |
+| `@dsh-plugin/dsh-loader/tools` | `@deepseek-ai/dsh-tools` |
+| `@dsh-plugin/dsh-loader/llm` | `@deepseek-ai/dsh-llm` |
+| `@dsh-plugin/dsh-loader/agent` | `@deepseek-ai/dsh-agent` |
+| `@dsh-plugin/dsh-loader/settings` | `@deepseek-ai/dsh-settings` |
 
-### 4. Client 侧：用 `@dsh-external/dshloader/*` subpath 导入 UI 包
+### 4. Client 侧：用 `@dsh-plugin/dsh-loader/*` subpath 导入 UI 包
 
 ```ts
 // ❌ 不要这样——dsh 改包名就坏
 import { IconCloseFill14 } from '@deepseek-ai/dsh-client-ui-primitives';
 
 // ✅ 用 dshloader 的稳定 subpath
-import { IconCloseFill14 } from '@dsh-external/dshloader/ui-primitives';
+import { IconCloseFill14 } from '@dsh-plugin/dsh-loader/ui-primitives';
 ```
 
 | 稳定 subpath | dsh 1.x 真实包名 |
 |---|---|
-| `@dsh-external/dshloader/ui-primitives` | `@deepseek-ai/dsh-client-ui-primitives` |
-| `@dsh-external/dshloader/ui-slots` | `@deepseek-ai/dsh-client-ui-slots` |
-| `@dsh-external/dshloader/ui-settings` | `@deepseek-ai/dsh-client-ui-settings/client` |
-| `@dsh-external/dshloader/web-react` | `@deepseek-ai/dsh-client-web-react` |
-| `@dsh-external/dshloader/schema-form` | `@deepseek-ai/dsh-client-schema-form` |
-| `@dsh-external/dshloader/runtime` | `@deepseek-ai/dsh-client-runtime/client` |
+| `@dsh-plugin/dsh-loader/ui-primitives` | `@deepseek-ai/dsh-client-ui-primitives` |
+| `@dsh-plugin/dsh-loader/ui-slots` | `@deepseek-ai/dsh-client-ui-slots` |
+| `@dsh-plugin/dsh-loader/ui-settings` | `@deepseek-ai/dsh-client-ui-settings/client` |
+| `@dsh-plugin/dsh-loader/web-react` | `@deepseek-ai/dsh-client-web-react` |
+| `@dsh-plugin/dsh-loader/schema-form` | `@deepseek-ai/dsh-client-schema-form` |
+| `@dsh-plugin/dsh-loader/runtime` | `@deepseek-ai/dsh-client-runtime/client` |
 
 构建配置（tsdown / rollup / esbuild）需要把这些 subpath 加入 `external`：
 
 ```ts
 const CLIENT_EXTERNALS = [
   'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', 'cordis',
-  '@dsh-external/dshloader/ui-primitives',
-  '@dsh-external/dshloader/ui-slots',
-  '@dsh-external/dshloader/ui-settings',
-  '@dsh-external/dshloader/web-react',
-  '@dsh-external/dshloader/schema-form',
-  '@dsh-external/dshloader/runtime',
+  '@dsh-plugin/dsh-loader/ui-primitives',
+  '@dsh-plugin/dsh-loader/ui-slots',
+  '@dsh-plugin/dsh-loader/ui-settings',
+  '@dsh-plugin/dsh-loader/web-react',
+  '@dsh-plugin/dsh-loader/schema-form',
+  '@dsh-plugin/dsh-loader/runtime',
 ]
 ```
 
@@ -109,8 +109,8 @@ window.__dshLoader__.registerPackageAlias('@old/pkg', '@new/pkg');
 
 ### 6. 核心原则
 
-- **插件 `package.json` 不允许出现 `@deepseek-ai/*`**——只依赖 `@dsh-external/dshloader`。
-- **源码 import 只用 `@dsh-external/dshloader/*`**——dsh 改包名时只改 dshloader 适配器，插件不动。
+- **插件 `package.json` 不允许出现 `@deepseek-ai/*`**——只依赖 `@dsh-plugin/dsh-loader`。
+- **源码 import 只用 `@dsh-plugin/dsh-loader/*`**——dsh 改包名时只改 dshloader 适配器，插件不动。
 - **host 侧用 `ctx.dshLoader.{settings,web,services}`**——不直接调 dsh 内部服务。
 - **client 侧用 `window.__dshLoader__`**——不直接调 dsh 内部 RPC。
 
@@ -295,18 +295,18 @@ interface DshLoaderServicesAPI {
 
 **推荐用法——稳定 subpath（主路径）**：
 
-插件不要直接 `require('@deepseek-ai/dsh-tools')`，而是从 dshloader 的 subpath 导入 `require('@dsh-external/dshloader/tools')`。dshloader 在 `package.json` 的 `exports` 里暴露这些 subpath，内部 re-export 真实 dsh 包。适配器同时在 `Module._resolveFilename` 安装映射，把稳定名解析到当前 dsh 版本的真实包名。dsh 改包名时只改 dshloader，插件不动。
+插件不要直接 `require('@deepseek-ai/dsh-tools')`，而是从 dshloader 的 subpath 导入 `require('@dsh-plugin/dsh-loader/tools')`。dshloader 在 `package.json` 的 `exports` 里暴露这些 subpath，内部 re-export 真实 dsh 包。适配器同时在 `Module._resolveFilename` 安装映射，把稳定名解析到当前 dsh 版本的真实包名。dsh 改包名时只改 dshloader，插件不动。
 
 | 稳定 subpath | dsh 1.x 真实包名 |
 |--------------|------------------|
-| `@dsh-external/dshloader/tools` | `@deepseek-ai/dsh-tools` |
-| `@dsh-external/dshloader/llm` | `@deepseek-ai/dsh-llm` |
-| `@dsh-external/dshloader/agent` | `@deepseek-ai/dsh-agent` |
-| `@dsh-external/dshloader/settings` | `@deepseek-ai/dsh-settings` |
+| `@dsh-plugin/dsh-loader/tools` | `@deepseek-ai/dsh-tools` |
+| `@dsh-plugin/dsh-loader/llm` | `@deepseek-ai/dsh-llm` |
+| `@dsh-plugin/dsh-loader/agent` | `@deepseek-ai/dsh-agent` |
+| `@dsh-plugin/dsh-loader/settings` | `@deepseek-ai/dsh-settings` |
 
 ```js
 // 插件代码（稳定 subpath，不随 dsh 版本变）：
-const { defineTool } = require('@dsh-external/dshloader/tools')
+const { defineTool } = require('@dsh-plugin/dsh-loader/tools')
 ```
 
 插件的 `package.json` 只需要声明 dshloader 一个依赖，不需要声明任何 `@deepseek-ai/*` 包：
@@ -314,7 +314,7 @@ const { defineTool } = require('@dsh-external/dshloader/tools')
 ```json
 {
   "dependencies": {
-    "@dsh-external/dshloader": "link:..."
+    "@dsh-plugin/dsh-loader": "link:..."
   }
 }
 ```
@@ -404,33 +404,33 @@ const conversation = window.__dshLoader__.services.get('conversation');
 
 **推荐用法——稳定 subpath（主路径）**：
 
-插件源码不要直接 `import { IconX } from '@deepseek-ai/dsh-client-ui-primitives'`，而是从 dshloader 的 subpath 导入 `import { IconX } from '@dsh-external/dshloader/ui-primitives'`。构建器把 `@dsh-external/dshloader/ui-primitives` 列为 external，bundle 里是 `require('@dsh-external/dshloader/ui-primitives')`，运行时 dshloader 的 `__ModuleLoader__` wrapper 把它映射到当前 dsh 版本的真实包名。
+插件源码不要直接 `import { IconX } from '@deepseek-ai/dsh-client-ui-primitives'`，而是从 dshloader 的 subpath 导入 `import { IconX } from '@dsh-plugin/dsh-loader/ui-primitives'`。构建器把 `@dsh-plugin/dsh-loader/ui-primitives` 列为 external，bundle 里是 `require('@dsh-plugin/dsh-loader/ui-primitives')`，运行时 dshloader 的 `__ModuleLoader__` wrapper 把它映射到当前 dsh 版本的真实包名。
 
 | 稳定 subpath | dsh 1.x 真实包名 |
 |--------------|------------------|
-| `@dsh-external/dshloader/ui-primitives` | `@deepseek-ai/dsh-client-ui-primitives` |
-| `@dsh-external/dshloader/ui-slots` | `@deepseek-ai/dsh-client-ui-slots` |
-| `@dsh-external/dshloader/web-react` | `@deepseek-ai/dsh-client-web-react` |
-| `@dsh-external/dshloader/schema-form` | `@deepseek-ai/dsh-client-schema-form` |
-| `@dsh-external/dshloader/runtime` | `@deepseek-ai/dsh-client-runtime/client` |
+| `@dsh-plugin/dsh-loader/ui-primitives` | `@deepseek-ai/dsh-client-ui-primitives` |
+| `@dsh-plugin/dsh-loader/ui-slots` | `@deepseek-ai/dsh-client-ui-slots` |
+| `@dsh-plugin/dsh-loader/web-react` | `@deepseek-ai/dsh-client-web-react` |
+| `@dsh-plugin/dsh-loader/schema-form` | `@deepseek-ai/dsh-client-schema-form` |
+| `@dsh-plugin/dsh-loader/runtime` | `@deepseek-ai/dsh-client-runtime/client` |
 
 ```ts
 // 插件源码（稳定 subpath，不随 dsh 版本变）：
-import { IconCloseFill14, Tooltip } from '@dsh-external/dshloader/ui-primitives'
+import { IconCloseFill14, Tooltip } from '@dsh-plugin/dsh-loader/ui-primitives'
 ```
 
-构建配置（tsdown 等）需要把 `@dsh-external/dshloader/*` 加入 external 列表，让构建器不内联这些包：
+构建配置（tsdown 等）需要把 `@dsh-plugin/dsh-loader/*` 加入 external 列表，让构建器不内联这些包：
 
 ```ts
 const CLIENT_EXTERNALS = [
   'react',
   'react/jsx-runtime',
   // ... 其他平台包 ...
-  '@dsh-external/dshloader/ui-primitives',
-  '@dsh-external/dshloader/ui-slots',
-  '@dsh-external/dshloader/web-react',
-  '@dsh-external/dshloader/schema-form',
-  '@dsh-external/dshloader/runtime',
+  '@dsh-plugin/dsh-loader/ui-primitives',
+  '@dsh-plugin/dsh-loader/ui-slots',
+  '@dsh-plugin/dsh-loader/web-react',
+  '@dsh-plugin/dsh-loader/schema-form',
+  '@dsh-plugin/dsh-loader/runtime',
 ]
 ```
 
@@ -439,7 +439,7 @@ const CLIENT_EXTERNALS = [
 ```json
 {
   "dependencies": {
-    "@dsh-external/dshloader": "link:..."
+    "@dsh-plugin/dsh-loader": "link:..."
   }
 }
 ```
@@ -465,7 +465,7 @@ window.__dshLoader__.registerPackageAlias(
 
 **工作原理**：dshloader 在 `immediately` 层包装 `window.__ModuleLoader__.load`，把每个 factory 收到的 `require` 函数包一层——先查 `packageAliases` 表做包名映射，再调原始 `require`。
 
-> **注意**：包名映射只在 `require(spec)` 的 `spec` 精确匹配时生效，不做子路径拆分（`require('@dsh-external/dshloader/pkg/sub')` 不会命中 `@dsh-external/dshloader/pkg` 的映射）。dsh 的 client bundle 构建器把包名整体作为一个模块 ID 传给 factory 的 require，不存在子路径拆分问题。
+> **注意**：包名映射只在 `require(spec)` 的 `spec` 精确匹配时生效，不做子路径拆分（`require('@dsh-plugin/dsh-loader/pkg/sub')` 不会命中 `@dsh-plugin/dsh-loader/pkg` 的映射）。dsh 的 client bundle 构建器把包名整体作为一个模块 ID 传给 factory 的 require，不存在子路径拆分问题。
 
 ### 2.6 `window.__dshLoader__.rpc.settings.*`（仅 `exposeAllNamespaces: true`）
 
@@ -588,7 +588,7 @@ class UnsupportedDshVersionError extends Error {
 | `kind` | 触发条件 | 消息特征 |
 |--------|----------|----------|
 | `'too-old'` | 真实版本低于所有适配器的最低下界 | 含 "too old" + 最低支持版本 |
-| `'too-new'` | 注册表为空，或版本既不命中任何规则也不属于 too-old | 含 "upgrade @dsh-external/dshloader" |
+| `'too-new'` | 注册表为空，或版本既不命中任何规则也不属于 too-old | 含 "upgrade @dsh-plugin/dsh-loader" |
 
 ### 4.2 `InvalidVersionError`
 
@@ -727,7 +727,7 @@ interface ClientAdapter {
 
 ## 7. AdapterRegistry 与版本探测
 
-模块路径：`@dsh-external/dshloader/registry`
+模块路径：`@dsh-plugin/dsh-loader/registry`
 
 ### 7.1 `detectDshVersion(opts?)`
 
@@ -784,7 +784,7 @@ class AdapterRegistry {
 function registerHostAdapters(registry: AdapterRegistry): AdapterRegistry;
 ```
 
-把所有内置 host 适配器注册到给定 registry。来自 `@dsh-external/dshloader/adapters`。
+把所有内置 host 适配器注册到给定 registry。来自 `@dsh-plugin/dsh-loader/adapters`。
 
 ### 7.4 `hostAdapters` / `clientAdapters`
 
@@ -799,7 +799,7 @@ const clientAdapters: ClientAdapterFactory[];
 
 ## 8. Host bundle 入口
 
-模块路径：`@dsh-external/dshloader`（即 `src/index.js`）
+模块路径：`@dsh-plugin/dsh-loader`（即 `src/index.js`）
 
 ### 8.1 cordis 函数插件导出
 
@@ -857,7 +857,7 @@ export const LOADER_VERSION: string;  // '1.0.0'
 
 ## 9. Client bundle 入口
 
-模块路径：`@dsh-external/dshloader/client`（即 `src/client.js`）
+模块路径：`@dsh-plugin/dsh-loader/client`（即 `src/client.js`）
 
 ### 9.1 `installClient(opts?)`
 
@@ -917,7 +917,7 @@ Commands:
 
 ### 10.1 `dshloader setup <profile>`
 
-- 把 `@dsh-external/dshloader` 加入 profile `package.json` 的 `dependencies`（若不存在）。
+- 把 `@dsh-plugin/dsh-loader` 加入 profile `package.json` 的 `dependencies`（若不存在）。
 - 在 `cordis.patch.yml` 追加 dshloader 的 `insert` 条目（若不存在）。
 - **不调整** `insert` 列表顺序（cordis 响应式 DI，位次不影响生效）。
 - 幂等：重复运行不会重复添加。
@@ -958,7 +958,7 @@ function info(profileName?: string): { loaderVersion: string; dshVersion?: strin
 dsh plugin --profile <name> add /path/to/dshloader
 
 # 从 npm（发布后）
-dsh plugin --profile <name> add @dsh-external/dshloader@^1.0.0
+dsh plugin --profile <name> add @dsh-plugin/dsh-loader@^1.0.0
 
 # 或用 setup 脚本（仅注入依赖 + patch，不调用 pnpm）
 DSH_HOME=~/.dsh npx dshloader setup <name>
@@ -974,11 +974,11 @@ DSH_HOME=~/.dsh npx dshloader setup <name>
 ```jsonc
 {
   "dependencies": {
-    "@dsh-external/dshloader": "^1.0.0"
+    "@dsh-plugin/dsh-loader": "^1.0.0"
   },
   "dsh": {
     "profile": {
-      "bundles": ["@dsh-external/dshloader"]
+      "bundles": ["@dsh-plugin/dsh-loader"]
     },
     "dshloader": {
       "exposeAllNamespaces": false   // 可选，默认 false
@@ -1015,9 +1015,9 @@ DSH_HOME=~/.dsh npx dshloader setup <name>
 
 | 用途 | import 路径 |
 |------|-------------|
-| host bundle 入口 | `@dsh-external/dshloader` |
-| client bundle 入口 | `@dsh-external/dshloader/client` |
-| AdapterRegistry + 版本探测 | `@dsh-external/dshloader/registry` |
-| 适配器注册 | `@dsh-external/dshloader/adapters`（内部模块 `src/adapters/index.js`） |
-| cordis patch 文件 | `@dsh-external/dshloader/cordis.patch.yml` |
-| package.json | `@dsh-external/dshloader/package.json` |
+| host bundle 入口 | `@dsh-plugin/dsh-loader` |
+| client bundle 入口 | `@dsh-plugin/dsh-loader/client` |
+| AdapterRegistry + 版本探测 | `@dsh-plugin/dsh-loader/registry` |
+| 适配器注册 | `@dsh-plugin/dsh-loader/adapters`（内部模块 `src/adapters/index.js`） |
+| cordis patch 文件 | `@dsh-plugin/dsh-loader/cordis.patch.yml` |
+| package.json | `@dsh-plugin/dsh-loader/package.json` |

@@ -12,7 +12,7 @@ import { AdapterRegistry, detectDshVersion, UnsupportedDshVersionError } from '.
 import { registerHostAdapters } from './adapters/index.js';
 import { createHostAPI } from './api.js';
 
-export const name = 'dshloader';
+export const name = '@dsh-plugin/dsh-loader';
 // dshloader itself depends on `webServer` so its fiber only activates once
 // the real web server is provided — the alias then points `httpServer` at it.
 export const inject = ['webServer'];

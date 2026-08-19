@@ -30,9 +30,9 @@ test('setup injects dependency and patch into profile', () => {
     assert.equal(result.dependencyAdded, true);
     assert.equal(result.patchAdded, true);
     const pkg = JSON.parse(readFileSync(join(prof.profileDir, 'package.json'), 'utf8'));
-    assert.ok(pkg.dependencies['@dsh-external/dshloader']);
+    assert.ok(pkg.dependencies['@dsh-plugin/dsh-loader']);
     const patch = readFileSync(join(prof.profileDir, 'cordis.patch.yml'), 'utf8');
-    assert.match(patch, /id: dshloader/);
+    assert.match(patch, /id: dsh-loader/);
     // idempotent
     const r2 = setupProfile('web');
     assert.equal(r2.dependencyAdded, false);
