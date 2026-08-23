@@ -61,24 +61,37 @@ const CLIENT_EXTERNALS = [
 
 纯脚本插件（只用 `tsc`、在工厂里 `require`）无需改打包配置——工厂的 `require` 直接可用。
 
-### ⚠️ 不要用子路径转发官方 UI 原语
+### ⚠️ 官方 UI 原语用 `DshMenu` 包装层，不要直取官方包、也不要走子路径
 
-`@dsh-plugin/dsh-loader/ui-primitives` 的 `.d.ts` 是 `export * from '@deepseek-ai/dsh-client-ui-primitives'`，而这行 re-export 从 **dsh-loader 自己的位置**解析——不是消费者位置。dsh-loader 发布后不带 `devDependencies`，于是消费者侧必然：
+`Menu` 的正确取法（dsh-auxiliary / dsh-code-review 已迁移）：
+
+```ts
+import { DshMenu as Menu, type MenuEntry } from '@dsh-plugin/dsh-loader/client';
+```
+
+**为什么不是子路径转发**：`@dsh-plugin/dsh-loader/ui-primitives` 的 `.d.ts` 是
+`export * from '@deepseek-ai/dsh-client-ui-primitives'`，这行 re-export 从
+**dsh-loader 自己的位置**解析——消费者装了该包也没用；dsh-loader 发布后不带
+devDependencies，消费者侧必然：
 
 ```
 Module '"@dsh-plugin/dsh-loader/ui-primitives"' has no exported member 'Menu'.
 ```
 
-**所以 `Menu` 这类 shell 主动共享进模块表的公开原语，直接从官方包导入**：
+**为什么也不建议直接 import 官方包**：那样每个插件都各自绑定官方导出名与包路径，
+dsh 改名/换包/改 props 时要逐个插件修。包装层把这些吸收在一处。
 
-```ts
-import { Menu, type MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives';  // 官方公开原语
-import { Icon } from '@dsh-plugin/dsh-loader/client';                          // loader 策划图标
-```
+**包装层怎么做的**（`src/ui/menu.tsx`）：
 
-它们不是 dsh 的私有内部面，运行时由模块表可靠解析；绕子路径既无收益又会坏掉类型。
+- **类型全部手写**（`MenuItem`/`MenuSeparator`/`MenuLabel`/`MenuEntry`/`DshMenuProps`），
+  绝不 re-export 上游类型——这是铁律三的死结的唯一解法；代价是上游 props 变化时要
+  手动跟进这份声明；
+- **值单点导入**：整个 dshloader 只有 `menu.tsx` 一处出现该平台包名，打包时列为
+  external，运行时经模块表解析；
+- **降级**：原语抛错时 warn 一次并渲染 null（失败被闩住，不刷屏），不拖垮宿主插件树。
 
-**图标相反，改用 loader 策划集确有收益**：消除手写 SVG、统一设计语言、`currentColor` 跟随主题、不依赖具体官方图标导出名。详见 §4。
+维护提醒：dsh 升级后若 `Menu.d.ts` 增删了插件在用的 props，同步修改 `src/ui/menu.tsx`
+的手写声明——这是消费方零耦合的固定成本。
 
 ---
 

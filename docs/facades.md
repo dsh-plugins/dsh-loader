@@ -97,9 +97,12 @@ Module '"@dsh-plugin/dsh-loader/ui-primitives"' has no exported member 'Menu'.
 
 （本地表现为 `@dsh-plugin/dsh-loader` 是指向源目录的 Junction，解析基准落在 dsh-loader 侧。）
 
-**因此**：对 shell **主动共享进浏览器模块表的公开 UI 原语**（`Menu`、`schema-form` 等），直接从官方包导入即可——它们不是 dsh 的私有内部面，运行时由模块表可靠解析，绕子路径既无收益又会坏掉类型。子路径真正适用的是**只要值不要类型**、或类型由 dshloader 手写声明的场景。
+**因此**：子路径 re-export 上游类型这条路是死的。公开原语有两条活路：
 
-想彻底消除这类导入，唯一可行路线是让子路径**手写类型声明**而非 re-export，代价是签名要跟随 dsh 升级维护。
+1. **直接从官方包导入**——类型天然保真，但每个插件各自绑定官方导出名与包路径；
+2. **经 dshloader 的包装层**（推荐，`Menu` 已落地）：`src/ui/menu.tsx` 手写最小类型声明 + 单点导入平台包，消费方 `import { DshMenu as Menu } from '@dsh-plugin/dsh-loader/client'`。dsh 改名/换包/改 props 时只改 loader 一处；代价是手写声明要跟随上游 props 变化维护（见 docs/ui-kit.md「官方 UI 原语用 DshMenu 包装层」）。
+
+子路径真正适用的只剩**只要值不要类型**的场景。
 
 ---
 

@@ -17,6 +17,7 @@ export * from './anchors.js';
 export * from './style.js';
 export * from './icons.js';
 export * from './components.js';
+export * from './menu.js';
 
 /** The `ui` facade plus the built-in anchor helpers. */
 export interface DshLoaderUi extends UiAPI {

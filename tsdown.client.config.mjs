@@ -28,6 +28,10 @@ const CLIENT_EXTERNALS = [
   'react-dom/client',
   'cordis',
   '@deepseek-ai/cordis',
+  // The wrapped platform menu (src/ui/menu.tsx) resolves through the module
+  // table at runtime, exactly like react — the wrapper's whole point is that
+  // only this bundle names the package.
+  '@deepseek-ai/dsh-client-ui-primitives',
 ]
 
 export default {
