@@ -68,7 +68,20 @@ export function injectPatch(patchPath: string): { added: boolean; text: string }
     return { added: false, text };
   }
   const insertion = `- insert:\n    ${PATCH_ENTRY}\n`;
-  const next = text.length === 0 ? insertion : text.endsWith('\n') ? text + insertion : text + '\n' + insertion;
+  let next: string;
+  if (text.trim().length === 0) {
+    next = insertion;
+  } else if (/^[ \t]*\[\][ \t]*$/m.test(text.replace(/\r\n/g, '\n').trimEnd())) {
+    // The scaffold patch file is a single empty-list document. Appending a
+    // second YAML document after it without a separator is a parse error
+    // ("end of the stream or a document separator is expected"), so replace
+    // the empty list with the real entries instead of appending after it.
+    next = text.replace(/\[\][ \t]*(\r?\n)?$/, insertion);
+  } else if (text.endsWith('\n') || text.endsWith('\r\n')) {
+    next = text + '---\n' + insertion;
+  } else {
+    next = text + '\n---\n' + insertion;
+  }
   writeFileSync(patchPath, next);
   return { added: true, text: next };
 }
