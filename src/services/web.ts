@@ -34,18 +34,35 @@ export function createWebAPI(opts: { ctx: CordisContext }): WebAPI {
     return web;
   }
 
+  /** One `kind: 'route'` registration for a single HTTP method. */
+  function route(method: string, path: string, handler: unknown): () => void {
+    const web = server();
+    return web.register({ kind: 'route', method, path, handler }) ?? (() => {});
+  }
+
   return {
     register(prefix, handler) {
       const web = server();
       return web.register({ kind: 'prefix', path: prefix, handler }) ?? (() => {});
     },
-    get(path, handler) {
+    exact(path, handler) {
       const web = server();
-      return web.register({ kind: 'route', method: 'GET', path, handler }) ?? (() => {});
+      return web.register({ kind: 'exact', path, handler }) ?? (() => {});
+    },
+    get(path, handler) {
+      return route('GET', path, handler);
     },
     post(path, handler) {
-      const web = server();
-      return web.register({ kind: 'route', method: 'POST', path, handler }) ?? (() => {});
+      return route('POST', path, handler);
+    },
+    put(path, handler) {
+      return route('PUT', path, handler);
+    },
+    patch(path, handler) {
+      return route('PATCH', path, handler);
+    },
+    del(path, handler) {
+      return route('DELETE', path, handler);
     },
     use(middleware) {
       const web = server();

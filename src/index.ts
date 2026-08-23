@@ -11,6 +11,7 @@ import { join, resolve } from 'node:path';
 import { AdapterRegistry, detectDshVersion, UnsupportedDshVersionError } from './registry.js';
 import { registerHostAdapters } from './adapters/index.js';
 import { createHostAPI } from './api.js';
+import { preloadRegistryModules } from './services/registry.js';
 import type { CordisContext, AdapterFactory, HostAdapterConfig } from './types.js';
 
 export const name = '@dsh-plugin/dsh-loader';
@@ -93,6 +94,11 @@ export async function applyAdapter(
   const adapter = factory.create(ctx, config as HostAdapterConfig);
   await adapter.apply?.();
 
+  // Optional dsh modules the registry facade proxies (sandbox escalation
+  // targets, permission-preset folding). Absent modules degrade that facade
+  // method to a logged no-op — see services/registry.ts.
+  const registryModules = await preloadRegistryModules();
+
   const api = createHostAPI({
     ctx,
     dshVersion,
@@ -100,11 +106,12 @@ export async function applyAdapter(
     adapter,
     exposeAllNamespaces: config.exposeAllNamespaces,
     hostPackageAliases: config.hostPackageAliases,
+    registryModules,
   });
   ctx.reflect.provide('dshLoader', api);
 
   console.log(`${LOG_PREFIX} loaded adapter ${factory.name} for dsh ${dshVersion} (mode: ${mode})`);
-  console.log(`${LOG_PREFIX} registered stable API: settings, web, services`);
+  console.log(`${LOG_PREFIX} registered stable API: settings, web, services, patch, registry, llm`);
   if (config.exposeAllNamespaces) {
     console.warn(
       `${LOG_PREFIX} exposeAllNamespaces enabled: bypassing official settings whitelist`,

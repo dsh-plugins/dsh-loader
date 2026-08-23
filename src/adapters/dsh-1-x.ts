@@ -44,6 +44,10 @@ export const hostPackageAliases: Record<string, string> = {
   '@dsh-plugin/dsh-loader/llm': '@deepseek-ai/dsh-llm',
   '@dsh-plugin/dsh-loader/agent': '@deepseek-ai/dsh-agent',
   '@dsh-plugin/dsh-loader/settings': '@deepseek-ai/dsh-settings',
+  '@dsh-plugin/dsh-loader/timeout': '@deepseek-ai/dsh-timeout',
+  '@dsh-plugin/dsh-loader/subagent': '@deepseek-ai/dsh-subagent',
+  '@dsh-plugin/dsh-loader/credentials': '@deepseek-ai/dsh-credentials',
+  '@dsh-plugin/dsh-loader/compaction-basic': '@deepseek-ai/dsh-compaction-basic',
 };
 
 /** Loosely-typed node:module NodeModule for the _resolveFilename hook. */

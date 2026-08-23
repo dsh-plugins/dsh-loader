@@ -16,5 +16,6 @@
     "outDir": "dist",
     "noEmit": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/ui/**", "src/client-ui.tsx"]
 }

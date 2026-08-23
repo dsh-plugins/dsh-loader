@@ -108,8 +108,14 @@ export function createSettingsAPI(opts: {
   ctx: CordisContext;
   exposeAllNamespaces: boolean;
   whitelist?: Set<string>;
+  /** The real `@deepseek-ai/dsh-settings` module, when it resolved at boot. */
+  module?: {
+    installSettingsSection?: (ctx: unknown, ns: unknown, schema: unknown, entry: unknown, hooks: unknown) => void;
+    settingsNamespace?: (id: string) => unknown;
+    SettingsConflictError?: new (...args: never[]) => Error;
+  };
 }): SettingsAPI {
-  const { ctx, exposeAllNamespaces, whitelist } = opts;
+  const { ctx, exposeAllNamespaces, whitelist, module } = opts;
   const allowed = whitelist ?? DEFAULT_WEB_SETTINGS_NAMESPACES;
 
   function getSettings() {
@@ -197,6 +203,40 @@ export function createSettingsAPI(opts: {
     },
     mutate(ns, ops, expectedRevision) {
       return api._write('mutate', ns, ops, expectedRevision);
+    },
+
+    namespace(id: string) {
+      const make = module?.settingsNamespace;
+      if (typeof make !== 'function') {
+        // No dsh-settings: hand back the raw id. Callers only pass it straight
+        // back into this facade, so an opaque handle and a string behave alike.
+        return id;
+      }
+      return make(id);
+    },
+
+    installSection(consumerCtx, ns, schema, entry, hooks) {
+      const install = module?.installSettingsSection;
+      if (typeof install !== 'function') {
+        console.warn(
+          `${LOG_PREFIX}:settings.installSection — @deepseek-ai/dsh-settings is unavailable; ` +
+            'the consumer keeps its composition entry (no user-settings layer)',
+        );
+        return false;
+      }
+      install(consumerCtx, ns, schema, entry, hooks);
+      return true;
+    },
+
+    isConflictError(error: unknown) {
+      const Ctor = module?.SettingsConflictError;
+      if (typeof Ctor === 'function' && error instanceof Ctor) return true;
+      // Structural fallback: dsh marks conflicts with expected/actual revisions.
+      return (
+        error !== null &&
+        typeof error === 'object' &&
+        ('expected' in error || 'actual' in error)
+      );
     },
   };
 

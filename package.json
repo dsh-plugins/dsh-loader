@@ -10,7 +10,10 @@
   "main": "dist/index.js",
   "exports": {
     ".": "./dist/index.js",
-    "./client": "./lib/client.js",
+    "./client": {
+      "types": "./lib/types/client-ui.d.ts",
+      "default": "./lib/client.js"
+    },
     "./registry": "./dist/registry.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json",
@@ -23,7 +26,12 @@
     "./tools": "./src/stable/tools.js",
     "./llm": "./src/stable/llm.js",
     "./agent": "./src/stable/agent.js",
-    "./settings": "./src/stable/settings.js"
+    "./settings": "./src/stable/settings.js",
+    "./timeout": "./src/stable/timeout.js",
+    "./subagent": "./src/stable/subagent.js",
+    "./credentials": "./src/stable/credentials.js",
+    "./compaction-basic": "./src/stable/compaction-basic.js",
+    "./patch": "./dist/patch.js"
   },
   "bin": {
     "dshloader": "./bin/dshloader.mjs"
@@ -34,33 +42,54 @@
     "bin",
     "lib/client.js",
     "lib/client.js.map",
+    "lib/types",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && tsdown --config tsdown.client.config.mjs",
+    "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.client.types.json && tsdown --config tsdown.client.config.mjs",
     "build:host": "tsc -p tsconfig.build.json",
-    "build:client": "tsdown --config tsdown.client.config.mjs",
-    "typecheck": "tsc --noEmit",
+    "build:client": "tsc -p tsconfig.client.types.json && tsdown --config tsdown.client.config.mjs",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.client.json --noEmit",
     "pretest": "npm run build:host",
-    "test": "node --test \"tests/**/*.test.mjs\"",
+    "test": "node --test \"tests/**/*.test.mjs\" && vitest run",
     "test:l1": "node --test \"tests/*.test.mjs\"",
     "test:l2": "node --test \"tests/module/*.test.mjs\"",
     "test:l3": "node --test \"tests/integration/*.test.mjs\"",
+    "test:ui": "vitest run",
     "setup": "node bin/dshloader.mjs setup"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
+    "@icon-park/react": "^1.4.2",
     "semver": "^7.8.5"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
     "@types/semver": "^7.8.0",
+    "jsdom": "^25.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "tsdown": "^0.22.2",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^2.1.0"
   },
   "dsh": {
     "bundle": {

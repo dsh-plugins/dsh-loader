@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    // `node` is required even though this program is the BROWSER half: the
+    // entry imports `./client.ts`, which imports `BRIDGE_PREFIX` and
+    // `clientAdapters` from the adapter modules, and those files are typed
+    // against Node. They contain no STATIC Node import — `node:module` is only
+    // reached through a dynamic `await import()` inside a function — so the
+    // bundle stays browser-clean while the types still resolve here.
+    "types": ["node"],
+    "strict": true,
+    "noImplicitOverride": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["src/ui/**/*", "src/client-ui.tsx"]
+}

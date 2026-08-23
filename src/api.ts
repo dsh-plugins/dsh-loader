@@ -10,6 +10,10 @@ import { LOADER_VERSION } from './version.js';
 import { createSettingsAPI } from './services/settings.js';
 import { createWebAPI } from './services/web.js';
 import { createServicesAPI } from './services/services.js';
+import { createRegistryAPI, type RegistryAPI, type RegistryModules } from './services/registry.js';
+import { createLlmAPI, type LlmAPI } from './services/llm.js';
+import { createDshSymbolsAPI, type DshSymbolsAPI } from './services/dsh-symbols.js';
+import { createPatchAPI, type PatchAPI } from './patch.js';
 import { installHostPackageAliases } from './adapters/dsh-1-x.js';
 import type {
   CordisContext,
@@ -32,6 +36,7 @@ export function createHostAPI(opts: {
   exposeAllNamespaces?: boolean;
   whitelist?: Set<string>;
   hostPackageAliases?: Record<string, string>;
+  registryModules?: RegistryModules;
 }): HostAPI {
   const {
     ctx,
@@ -41,6 +46,7 @@ export function createHostAPI(opts: {
     exposeAllNamespaces = false,
     whitelist,
     hostPackageAliases = {},
+    registryModules,
   } = opts;
 
   const base = {
@@ -52,9 +58,18 @@ export function createHostAPI(opts: {
   // Adapters may override any capability (design.md §4.4 HostAdapter.{settings,
   // web, services}); otherwise the default stable impl is used.
   const settings: SettingsAPI =
-    adapter?.settings ?? createSettingsAPI({ ctx, exposeAllNamespaces, whitelist });
+    adapter?.settings ??
+    createSettingsAPI({ ctx, exposeAllNamespaces, whitelist, module: registryModules?.settings });
   const web: WebAPI = adapter?.web ?? createWebAPI({ ctx });
   const services: ServicesAPI = adapter?.services ?? createServicesAPI({ ctx });
+  // `patch` is environment-agnostic and version-independent (the protocol never
+  // touches dsh shapes), so no adapter override seam is needed. `registry` DOES
+  // name private dsh shapes, so adapters may replace it wholesale.
+  const patch: PatchAPI = createPatchAPI();
+  const registry: RegistryAPI =
+    (adapter?.registry as RegistryAPI | undefined) ?? createRegistryAPI({ ctx, modules: registryModules });
+  const llm: LlmAPI = createLlmAPI({ module: registryModules?.llm });
+  const dsh: DshSymbolsAPI = createDshSymbolsAPI({ modules: registryModules });
 
   // Runtime host package-name alias registration. The adapter's apply()
   // installs the static set at boot; this method lets plugins add more
@@ -71,6 +86,10 @@ export function createHostAPI(opts: {
     settings,
     web,
     services,
+    patch,
+    registry,
+    llm,
+    dsh,
     registerPackageAlias,
   };
 }

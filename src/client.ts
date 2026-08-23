@@ -35,10 +35,22 @@ interface DshLoaderWindowLike {
 }
 
 declare global {
-  // Minimal browser global used only when this module is run in the browser
-  // bundle (the host build never touches it). Declared here so the module
-  // type-checks without pulling in the full DOM lib.
-  const window: DshLoaderWindowLike;
+  // Intentionally NOT declaring `window` here: this module must compile in BOTH
+  // programs — the Node build (tsconfig.build.json → dist/client.js, which the
+  // client tests import) with no DOM lib, and the browser program that also
+  // compiles the React UI modules WITH lib.dom. Declaring `window` would
+  // collide with lib.dom's own declaration in the latter, so the ambient window
+  // is read through `globalThis` by {@link ambientWindow} instead.
+}
+
+/**
+ * The ambient browser `window`, when this module runs in a browser-like realm.
+ * Read off `globalThis` so no DOM lib and no global declaration is required.
+ */
+function ambientWindow(): DshLoaderWindowLike | undefined {
+  const scope = globalThis as { window?: unknown };
+  const found = scope.window;
+  return typeof found === 'object' && found !== null ? (found as DshLoaderWindowLike) : undefined;
 }
 
 export class ModuleNotFoundError extends Error {
@@ -171,7 +183,7 @@ interface InstallClientOpts {
  * Install dshloader into a browser-like environment.
  */
 export function installClient(opts: InstallClientOpts = {}) {
-  const win = opts.window ?? (typeof window !== 'undefined' ? (window as DshLoaderWindowLike) : undefined);
+  const win = opts.window ?? ambientWindow();
   if (win === undefined) return undefined;
 
   const dshVersion = opts.dshVersion ?? win.__DSHLOADER_VERSION__;
@@ -371,5 +383,6 @@ export function installSettingsFetchInterceptor(
 export const name = '@dsh-plugin/dsh-loader'
 export const inject: string[] = []
 export function apply(ctx: { get?: (name: string) => any }) {
-  if (typeof window !== 'undefined') installClient({ window: window as DshLoaderWindowLike, clientCtx: ctx });
+  const win = ambientWindow();
+  if (win !== undefined) installClient({ window: win, clientCtx: ctx });
 }

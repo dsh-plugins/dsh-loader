@@ -1,0 +1,18 @@
+{
+  // Emit DECLARATIONS ONLY for the browser half, so consumers get real types for
+  // the UI facade and the base controls instead of hand-writing a cast.
+  //
+  // Kept separate from tsconfig.client.json (which is noEmit typecheck) and from
+  // the Node build (which excludes src/ui and src/client-ui.tsx entirely). tsdown
+  // emits the JS with `dts: false`; this config supplies the matching .d.ts.
+  "extends": "./tsconfig.client.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "declarationMap": false,
+    "outDir": "lib/types",
+    "rootDir": "src"
+  },
+  "include": ["src/ui/**/*", "src/client-ui.tsx"]
+}
