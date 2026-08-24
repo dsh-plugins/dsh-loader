@@ -28,6 +28,8 @@ export const T = {
   labelCaption: token('--dsw-alias-label-caption', '#a8a8a8'),
   /** Page / card background. */
   bgBase: token('--dsw-alias-bg-base', '#ffffff'),
+  /** Raised surface inside a page (shell layer 1). */
+  bgLayer1: token('--dsw-alias-bg-layer-1', 'rgba(127,127,127,0.06)'),
   /** Subtle raised surface. */
   bgSubtle: token('--dsw-alias-bg-subtle', 'rgba(127,127,127,0.06)'),
   /** Hover wash for interactive rows. */
@@ -36,28 +38,46 @@ export const T = {
   border: token('--dsw-alias-border-l2', '#d9d9d9'),
   /** Lighter divider. */
   borderSubtle: token('--dsw-alias-border-l1', '#ececec'),
-  /** Brand accent (primary button, checked states). */
+  /** Primary button fill — the shell's own button colour, NOT the brand accent. */
+  buttonPrimaryFill: token('--dsw-alias-button-primary-fill', '#4f7cff'),
+  /** Text placed on top of {@link buttonPrimaryFill}. */
+  buttonPrimaryForeground: token('--dsw-alias-label-primary-foreground', '#ffffff'),
+  /** Brand accent (checked states, focus rings). */
   accent: token('--dsw-alias-brand-primary', '#4f7cff'),
   /** Accent text placed on top of the accent fill. */
   accentOn: token('--dsw-alias-brand-on-primary', '#ffffff'),
   /** Destructive accent. */
   danger: token('--dsw-alias-status-danger', '#e5484d'),
+  /** Success state (saved confirmations). */
+  success: token('--dsw-alias-state-success-primary', '#2e7d32'),
   /** Monospace stack for code / paths. */
   fontCode: token('--ds-font-family-code', 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'),
 } as const;
 
-/** Shared control geometry so every dshloader control lines up. */
+/**
+ * Shared control geometry so every dshloader control lines up.
+ *
+ * The values mirror the shell's native settings-page metrics (as established by
+ * dsh-auxiliary's section): pill-shaped primary buttons at height 32, inputs at
+ * height 28 with radius 6, cards with radius 10 and padding 16.
+ */
 export const G = {
-  /** Control height for inputs / selects / buttons. */
-  controlHeight: 30,
+  /** Control height for inputs / selects. */
+  controlHeight: 28,
   /** Compact control height. */
   controlHeightSm: 24,
-  /** Standard corner radius. */
-  radius: 8,
-  /** Pill radius (switches, chips). */
+  /** Primary button height (the shell's buttons run taller than inputs). */
+  buttonHeight: 32,
+  /** Standard corner radius (inputs). */
+  radius: 6,
+  /** Card corner radius. */
+  cardRadius: 10,
+  /** Pill radius (primary buttons, switches, chips). */
   radiusPill: 999,
-  /** Horizontal padding inside a control. */
-  padX: 10,
+  /** Horizontal padding inside an input. */
+  padX: 8,
+  /** Horizontal padding inside a primary button. */
+  padXButton: 14,
   /** Standard row gap. */
   gap: 8,
   /** Base font size. */

@@ -260,9 +260,13 @@ describe('Checkbox / Switch', () => {
     expect((c.querySelector('input') as HTMLInputElement).disabled).toBe(true)
   })
 
-  it('Checkbox hides its decorative box from assistive tech', () => {
+  it('Checkbox uses a visible native input styled via accent-color (shell parity)', () => {
     const c = render(<Checkbox label="x" />)
-    expect(c.querySelector(`.${CX}-check__box`)!.getAttribute('aria-hidden')).toBe('true')
+    const input = c.querySelector('input') as HTMLInputElement
+    // 原生复选框:可见、参与无障碍树,由 accent-color 着色 —— 与 shell 设置页一致
+    expect(input.type).toBe('checkbox')
+    expect(input.style.display).not.toBe('none')
+    expect(c.querySelector(`.${CX}-check__box`)).toBeNull()
   })
 
   it('Switch carries role=switch and is controlled', () => {

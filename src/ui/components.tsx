@@ -32,21 +32,24 @@ const CSS = `
 .${CX}-col{display:flex;flex-direction:column;gap:${G.gap}px}
 .${CX}-btn{
   display:inline-flex;align-items:center;justify-content:center;gap:6px;
-  height:${G.controlHeight}px;padding:0 ${G.padX + 2}px;
-  font-size:${G.fontSize}px;font-family:inherit;line-height:1;
-  border-radius:${G.radius}px;border:1px solid ${T.border};
+  height:${G.buttonHeight}px;padding:0 ${G.padXButton}px;
+  font-size:14px;font-family:inherit;line-height:22px;
+  border-radius:${G.radiusPill}px;border:none;
   background:${T.bgBase};color:${T.labelPrimary};
   cursor:pointer;box-sizing:border-box;white-space:nowrap;
   transition:background .12s ease,border-color .12s ease,opacity .12s ease;
 }
 .${CX}-btn:hover:not(:disabled){background:${T.bgHover}}
 .${CX}-btn:disabled{opacity:.5;cursor:not-allowed}
-.${CX}-btn--primary{background:${T.accent};border-color:transparent;color:${T.accentOn}}
-.${CX}-btn--primary:hover:not(:disabled){filter:brightness(1.07);background:${T.accent}}
-.${CX}-btn--ghost{background:transparent;border-color:transparent}
-.${CX}-btn--ghost:hover:not(:disabled){background:${T.bgHover}}
-.${CX}-btn--danger{background:transparent;border-color:${T.danger};color:${T.danger}}
-.${CX}-btn--sm{height:${G.controlHeightSm}px;padding:0 ${G.padX}px;font-size:${G.fontSizeSm}px}
+.${CX}-btn--primary{
+  background:${T.buttonPrimaryFill};
+  color:${T.buttonPrimaryForeground};
+}
+.${CX}-btn--primary:hover:not(:disabled){filter:brightness(1.07);background:${T.buttonPrimaryFill}}
+.${CX}-btn--ghost{background:transparent;border-color:transparent;color:${T.labelSecondary}}
+.${CX}-btn--ghost:hover:not(:disabled){background:${T.bgHover};color:${T.labelPrimary}}
+.${CX}-btn--danger{background:transparent;border:1px solid ${T.danger};color:${T.danger};border-radius:${G.radius}px}
+.${CX}-btn--sm{height:${G.controlHeightSm}px;padding:0 ${G.padX + 2}px;font-size:${G.fontSizeSm}px;border-radius:${G.radius}px}
 .${CX}-iconbtn{
   display:inline-flex;align-items:center;justify-content:center;
   width:${G.controlHeight}px;height:${G.controlHeight}px;padding:0;
@@ -57,7 +60,7 @@ const CSS = `
 .${CX}-iconbtn:disabled{opacity:.5;cursor:not-allowed}
 .${CX}-input,.${CX}-textarea,.${CX}-select{
   width:100%;box-sizing:border-box;font-family:inherit;font-size:${G.fontSize}px;
-  color:${T.labelPrimary};background:${T.bgBase};
+  color:${T.labelPrimary};background:${T.bgLayer1};
   border:1px solid ${T.border};border-radius:${G.radius}px;
   padding:0 ${G.padX}px;height:${G.controlHeight}px;
   transition:border-color .12s ease;
@@ -67,21 +70,19 @@ const CSS = `
 .${CX}-input:disabled,.${CX}-textarea:disabled,.${CX}-select:disabled{opacity:.55;cursor:not-allowed}
 .${CX}-input--mono,.${CX}-textarea--mono{font-family:${T.fontCode}}
 .${CX}-input--invalid,.${CX}-textarea--invalid{border-color:${T.danger}}
-.${CX}-select{appearance:none;padding-right:26px;cursor:pointer}
+.${CX}-select{appearance:none;padding-right:26px;cursor:pointer;background-color:${T.bgBase}}
 .${CX}-selectwrap{position:relative;display:block;width:100%}
 .${CX}-selectwrap>.${CX}-caret{
   position:absolute;right:8px;top:50%;transform:translateY(-50%);
   pointer-events:none;color:${T.labelTertiary};display:inline-flex;
 }
-.${CX}-check{display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-size:${G.fontSize}px;color:${T.labelPrimary}}
-.${CX}-check input{position:absolute;opacity:0;width:0;height:0}
-.${CX}-check__box{
-  display:inline-flex;align-items:center;justify-content:center;flex:none;
-  width:16px;height:16px;border-radius:4px;border:1px solid ${T.border};
-  background:${T.bgBase};color:transparent;transition:background .12s ease,border-color .12s ease;
+.${CX}-check{display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;color:${T.labelPrimary};line-height:20px}
+.${CX}-check input{
+  position:relative;margin:0;width:16px;height:16px;flex:none;
+  appearance:auto;-webkit-appearance:checkbox;cursor:pointer;
+  accent-color:${T.accent};
 }
-.${CX}-check input:checked+.${CX}-check__box{background:${T.accent};border-color:transparent;color:${T.accentOn}}
-.${CX}-check input:focus-visible+.${CX}-check__box{box-shadow:0 0 0 2px ${T.accent}55}
+.${CX}-check input[disabled]{cursor:not-allowed}
 .${CX}-check--disabled{opacity:.55;cursor:not-allowed}
 .${CX}-switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:${G.fontSize}px;color:${T.labelPrimary}}
 .${CX}-switch input{position:absolute;opacity:0;width:0;height:0}
@@ -97,16 +98,16 @@ const CSS = `
 .${CX}-switch input:checked+.${CX}-switch__track>.${CX}-switch__knob{transform:translateX(14px)}
 .${CX}-switch input:focus-visible+.${CX}-switch__track{box-shadow:0 0 0 2px ${T.accent}55}
 .${CX}-switch--disabled{opacity:.55;cursor:not-allowed}
-.${CX}-field{display:flex;flex-direction:column;gap:5px}
-.${CX}-field__label{font-size:${G.fontSize}px;color:${T.labelPrimary};font-weight:500}
-.${CX}-field__desc{font-size:${G.fontSizeSm}px;color:${T.labelTertiary};line-height:1.5}
+.${CX}-field{display:flex;flex-direction:column;gap:6px}
+.${CX}-field__label{font-size:12px;font-weight:500;color:${T.labelSecondary};line-height:18px}
+.${CX}-field__desc{font-size:${G.fontSizeSm}px;color:${T.labelTertiary};line-height:18px}
 .${CX}-field__error{font-size:${G.fontSizeSm}px;color:${T.danger}}
 .${CX}-card{
-  display:flex;flex-direction:column;gap:12px;
-  padding:14px 16px;border:1px solid ${T.borderSubtle};border-radius:12px;
-  background:${T.bgBase};box-sizing:border-box;
+  display:flex;flex-direction:column;gap:10px;
+  padding:16px;border:1px solid ${T.border};border-radius:${G.cardRadius}px;
+  background:transparent;box-sizing:border-box;
 }
-.${CX}-card__title{margin:0;font-size:14px;font-weight:600;color:${T.labelPrimary}}
+.${CX}-card__title{margin:0;font-size:15px;font-weight:500;line-height:22px;color:${T.labelPrimary}}
 .${CX}-spin{display:inline-flex;animation:${CX}-spin 1s linear infinite}
 @keyframes ${CX}-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){
@@ -298,7 +299,8 @@ export interface CheckboxProps extends Omit<React.InputHTMLAttributes<HTMLInputE
   label?: React.ReactNode;
 }
 
-/** A checkbox with a styled box and an optional label. */
+/** A checkbox with an optional label. Native input styled via `accent-color`,
+ *  matching the shell's own settings pages. */
 export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(function Checkbox(
   { label, className, disabled, ...rest },
   ref,
@@ -308,11 +310,6 @@ export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(functi
     'label',
     { className: cx(`${CX}-check`, disabled === true && `${CX}-check--disabled`, className) },
     React.createElement('input', { ref, type: 'checkbox', disabled, ...rest }),
-    React.createElement(
-      'span',
-      { className: `${CX}-check__box`, 'aria-hidden': true },
-      React.createElement(Icon, { name: 'CheckSmall', size: 12 }),
-    ),
     label === undefined ? null : React.createElement('span', null, label),
   );
 });
