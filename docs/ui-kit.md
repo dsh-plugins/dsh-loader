@@ -250,7 +250,7 @@ console.table(ui.diagnose());
 
 ## 3. 基础控件
 
-12 个组件，一套 `dshl-` 前缀的样式表。设计约束：
+13 个组件，一套 `dshl-` 前缀的样式表。设计约束：
 
 - **样式只注入一次**，带 DSH 归属属性 `data-plugin` / `data-plugin-css`，HMR 可回收；
 - **每个颜色都是 DSH 令牌 + 回退值**，自动跟随 shell 主题（含深色模式），无需 JS 主题管线；
@@ -263,7 +263,8 @@ console.table(ui.diagnose());
 | `IconButton` | `icon` + **必填 `label`**（作为 `aria-label` 与 `title`，因为没有可见文字） |
 | `TextInput` | `mono`（等宽，用于路径/命令）、`invalid`（同时置 `aria-invalid`） |
 | `Textarea` | 同上，`min-height: 72px`，可竖向 resize |
-| `Select` | 基于**原生 `<select>`**，白拿平台键盘/移动端选择器/无障碍；`options`、`placeholder`（渲染为 disabled 空选项） |
+| `Select` | 基于**原生 `<select>`**，白拿平台键盘/移动端选择器/无障碍；`options`、`placeholder`（渲染为 disabled 空选项）。原生弹层不随 shell 主题，设置页请优先用 `MenuSelect` |
+| `MenuSelect` | 基于 `DshMenu` 的弹层下拉：触发钮与弹层完全对齐 shell 自带选择器（辅助模型页 ModelPicker 同款）；`onChange` 直接回调选项 value（非 DOM 事件）；近视口底部自动向上展开 |
 | `Checkbox` | 样式化方框 + 可选 `label`；装饰方框带 `aria-hidden` |
 | `Switch` | `role="switch"`；用于「即时生效」类设置 |
 | `Field` | label + 控件 + `description`/`error`（`role="alert"`）；`htmlFor` 关联 |
@@ -287,11 +288,11 @@ console.table(ui.diagnose());
 </Card>
 ```
 
-想要 DSH 的富弹出菜单而不是原生下拉时，用 `@dsh-plugin/dsh-loader/ui-primitives` 的 `Menu`（那是官方组件的稳定子路径转发）。
+想要 DSH 的富弹出菜单而不是现成下拉时，用 `DshMenu` 包装层自行组装触发钮与弹层（见 §2 的 ⚠️ 小节）；`MenuSelect` 就是这套组合的封装。
 
 ### 3.1 设计令牌
 
-`src/ui/style.ts` 的 `T` 是 shell 令牌 + 回退值，`G` 是共用几何量（控件高度 30/24、圆角 8、字号 13/12 等）。自定义样式请用它们，别写死颜色：
+`src/ui/style.ts` 的 `T` 是 shell 令牌 + 回退值，`G` 是共用几何量（输入高 28/按钮高 32、圆角 6/卡片 10/胶囊 999、字号 13/12 等）。自定义样式请用它们，别写死颜色：
 
 ```ts
 import { T, G, cx, injectStyle } from '@dsh-plugin/dsh-loader/client';

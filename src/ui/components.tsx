@@ -22,6 +22,7 @@
 import * as React from 'react';
 import { CX, G, T, cx, injectStyle } from './style.js';
 import { Icon, type IconName } from './icons.js';
+import { DshMenu, type MenuEntry } from './menu.js';
 
 /** Owner id used on the injected `<style>` tag. */
 const OWNER = '@dsh-plugin/dsh-loader';
@@ -76,6 +77,18 @@ const CSS = `
   position:absolute;right:8px;top:50%;transform:translateY(-50%);
   pointer-events:none;color:${T.labelTertiary};display:inline-flex;
 }
+.${CX}-mselect{position:relative;width:100%}
+.${CX}-mselect__trigger{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  width:100%;box-sizing:border-box;min-height:36px;padding:7px 10px;
+  font-family:inherit;font-size:14px;line-height:20px;text-align:left;
+  color:${T.labelPrimary};background:${T.bgLayer1};
+  border:1px solid ${T.border};border-radius:8px;cursor:pointer;appearance:none;
+}
+.${CX}-mselect__trigger:disabled{opacity:.45;cursor:not-allowed}
+.${CX}-mselect__text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.${CX}-mselect__text--ph{color:${T.labelTertiary}}
+.${CX}-mselect__caret{display:inline-flex;align-items:center;flex:none;color:${T.labelTertiary}}
 .${CX}-check{display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;color:${T.labelPrimary};line-height:20px}
 .${CX}-check input{
   position:relative;margin:0;width:16px;height:16px;flex:none;
@@ -290,6 +303,120 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
     React.createElement('span', { className: `${CX}-caret` }, React.createElement(Icon, { name: 'ChevronDown' })),
   );
 });
+
+/* ─────────────────────────── MenuSelect ─────────────────────────── */
+
+/** {@link MenuSelect} props — a value dropdown rendered with the platform menu. */
+export interface MenuSelectProps {
+  options: readonly SelectOption[];
+  /** Currently selected value; renders {@link placeholder} when unmatched. */
+  value?: string;
+  placeholder?: string;
+  disabled?: boolean;
+  /** Called with the chosen option's value. */
+  onChange?: (value: string) => void;
+  id?: string;
+  /** Field label, used for the trigger's accessible name. */
+  label?: string;
+  className?: string;
+}
+
+/** Height budget used when deciding whether the popup opens above the trigger. */
+const MENU_SELECT_MAX_HEIGHT = 264;
+
+/**
+ * A dropdown whose trigger and popup match the shell's own pickers (the
+ * dsh-auxiliary model picker look): a bordered layer-1 trigger button plus the
+ * platform menu popup via {@link DshMenu}.
+ *
+ * Prefer this over {@link Select} on settings pages: the native `<select>`
+ * popup is OS-styled and cannot follow the shell theme, which is exactly the
+ * visual drift this component removes. `Select` remains for dense/inline forms
+ * where the native control's compactness matters.
+ */
+export function MenuSelect({
+  options,
+  value,
+  placeholder,
+  disabled,
+  onChange,
+  id,
+  label,
+  className,
+}: MenuSelectProps): React.ReactElement {
+  useStyles();
+  const [open, setOpen] = React.useState(false);
+  const [side, setSide] = React.useState<'bottom' | 'top'>('bottom');
+  const triggerRef = React.useRef<HTMLButtonElement | null>(null);
+  const updateSide = React.useCallback((): void => {
+    const trigger = triggerRef.current;
+    if (trigger === null) return;
+    const rect = trigger.getBoundingClientRect();
+    const below = window.innerHeight - rect.bottom - 12;
+    const above = rect.top - 12;
+    setSide(below >= Math.min(MENU_SELECT_MAX_HEIGHT, above) ? 'bottom' : 'top');
+  }, []);
+  React.useEffect(() => {
+    if (!open) return undefined;
+    updateSide();
+    window.addEventListener('scroll', updateSide, true);
+    window.addEventListener('resize', updateSide);
+    return () => {
+      window.removeEventListener('scroll', updateSide, true);
+      window.removeEventListener('resize', updateSide);
+    };
+  }, [open, updateSide]);
+
+  const selected = options.find(option => option.value === value);
+  const text = selected !== undefined ? selected.label : placeholder ?? '';
+  const items = React.useMemo<readonly MenuEntry[]>(
+    () => options.map(option => ({ id: option.value, label: option.label, disabled: option.disabled })),
+    [options],
+  );
+
+  return React.createElement(
+    'div',
+    { className: cx(`${CX}-mselect`, className) },
+    React.createElement(DshMenu, {
+      open,
+      anchor: React.createElement(
+        'button',
+        {
+          ref: triggerRef,
+          type: 'button',
+          id,
+          disabled: disabled === true,
+          className: `${CX}-mselect__trigger`,
+          'aria-label': label !== undefined ? `${label}: ${text}` : text,
+          'aria-haspopup': 'menu',
+          'aria-expanded': open,
+          title: text,
+          onClick: () => setOpen(previous => !previous),
+        },
+        React.createElement(
+          'span',
+          { className: cx(`${CX}-mselect__text`, selected === undefined && `${CX}-mselect__text--ph`) },
+          text,
+        ),
+        React.createElement(
+          'span',
+          { className: `${CX}-mselect__caret`, 'aria-hidden': true },
+          React.createElement(Icon, { name: 'ChevronDown', size: 14 }),
+        ),
+      ),
+      items,
+      selectedId: value,
+      onSelect: (chosen: string) => {
+        onChange?.(chosen);
+        setOpen(false);
+      },
+      onClose: () => setOpen(false),
+      align: 'start',
+      side,
+      dense: true,
+    }),
+  );
+}
 
 /* ──────────────────────── Checkbox / Switch ───────────────────────── */
 

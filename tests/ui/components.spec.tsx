@@ -14,6 +14,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as React from 'react'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+
+// components.tsx now imports the wrapped menu (`DshMenu`), which statically
+// names the platform primitives package; the real package ships CSS modules
+// vitest cannot load. These tests never render a menu, so a null stub is
+// enough (the wrapper's own behaviour lives in menu.spec.tsx).
+vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
+  Menu: () => null,
+}))
+
 import {
   Button,
   Card,
