@@ -23,6 +23,12 @@ import type { CordisContext, AdapterFactory as Factory, HostAdapterConfig } from
 // the design-doc label "dsh-1-x"; the behavior is identical across both
 // ranges since dsh-upstream-fixes confirms httpServer->webServer + settings
 // bridge work the same way on 0.1.0-rc.7.
+//
+// Pre-release builds of covered lines (e.g. `0.1.1-rc.1`, `0.1.1-rc.2`) do
+// not satisfy this range under npm semver's pre-release rules even though
+// the release line is covered; the AdapterRegistry's rule 2b strips the
+// pre-release tag and re-tests, so dshloader loads on ANY build of the
+// 0.1.x/1.x lines.
 export const supports = '>=0.1.0-rc.1 <2.0.0';
 export const name = 'dsh-1-x';
 

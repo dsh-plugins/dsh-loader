@@ -6,6 +6,16 @@
  *   2. range match        — semver.satisfies(version, supports); when several
  *                           ranges cover the version, pick the narrowest; ties
  *                           broken by last-registered-wins.
+ *   2b. pre-release range match — no exact/range hit and the version carries a
+ *                           pre-release tag (e.g. `0.1.1-rc.2`): retry the
+ *                           range match with the pre-release tag stripped
+ *                           (`0.1.1`). npm semver refuses pre-release versions
+ *                           unless the range contains a comparator with the
+ *                           same [major,minor,patch] tuple, so `>=0.1.0-rc.1
+ *                           <2.0.0` never matches `0.1.1-rc.x` even though the
+ *                           intended release line is covered. Stripping the
+ *                           tag restores that intent and lets the compat shim
+ *                           load on ANY pre-release build of a covered line.
  *   3. nearest-low fallback — no exact/range hit, but some adapters only cover
  *                           versions below the real one: pick the one whose
  *                           upper bound is closest, mark mode 'fallback', warn.
@@ -212,6 +222,67 @@ export class AdapterRegistry {
       const exact = matches.find((m) => m.mode === 'exact');
       if (exact) best = exact;
       return { factory: best.factory, mode: best.mode };
+    }
+
+    // Rule 2b: pre-release range match. npm semver refuses a pre-release
+    // version unless the range carries a comparator with the same
+    // [major,minor,patch] tuple, so `>=0.1.0-rc.1 <2.0.0` never matches
+    // `0.1.1-rc.x` even though the release line is intended to be covered.
+    // Retry with the pre-release tag stripped so ANY pre-release build of a
+    // covered line loads (compat-shim guarantee).
+    const parsed = semver.parse(version);
+    if (parsed !== null && parsed.prerelease.length > 0) {
+      const releaseOnly = `${parsed.major}.${parsed.minor}.${parsed.patch}`;
+      const prereleaseMatches: AdapterSelection[] = [];
+      for (const factory of this.adapters) {
+        if (semver.satisfies(releaseOnly, factory.supports)) {
+          prereleaseMatches.push({ factory, mode: 'range' });
+        }
+      }
+      if (prereleaseMatches.length > 0) {
+        let best = prereleaseMatches[prereleaseMatches.length - 1];
+        for (let i = prereleaseMatches.length - 1; i >= 0; i -= 1) {
+          const candidate = prereleaseMatches[i];
+          const narrowest = prereleaseMatches.every((other, j) => {
+            if (i === j) return true;
+            try {
+              return semver.subset(candidate.factory.supports, other.factory.supports);
+            } catch {
+              return false;
+            }
+          });
+          if (narrowest) {
+            best = candidate;
+            break;
+          }
+        }
+        console.warn(
+          `${LOG_PREFIX} dsh ${version} is a pre-release; matched adapter "${best.factory.name}" via release ${releaseOnly} (supports ${best.factory.supports})`,
+        );
+        return { factory: best.factory, mode: 'range' };
+      }
+      // The stripped release lies outside every adapter range (e.g. a future
+      // major like `2.0.0-rc.1` → `2.0.0`). Keep the compat-shim promise of
+      // loading on ANY dsh version: fall back to the adapter whose upper
+      // bound is closest, same as rule 3 does for release versions.
+      const preLowers = this.adapters
+        .filter((f) => isLowerCandidate(f.supports, releaseOnly))
+        .map((f) => {
+          const { upper } = rangeBounds(f.supports);
+          return { factory: f, upper };
+        });
+      if (preLowers.length > 0) {
+        preLowers.sort((a, b) => {
+          const cmp = semver.compare(b.upper!.v, a.upper!.v);
+          if (cmp !== 0) return cmp;
+          return (b.upper!.inc ? 0 : 1) - (a.upper!.inc ? 0 : 1);
+        });
+        const chosen = preLowers[0];
+        console.warn(
+          `${LOG_PREFIX} dsh ${version} is a pre-release outside every adapter range; falling back to "${chosen.factory.name}" (supports ${chosen.factory.supports})`,
+        );
+        return { factory: chosen.factory, mode: 'fallback' };
+      }
     }
 
     // Rule 3: nearest-low fallback.

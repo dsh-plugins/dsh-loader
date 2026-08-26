@@ -1,4 +1,4 @@
-// L1 unit tests â€?AdapterRegistry version selection (design.md Â§4.5, Â§5.1).
+// L1 unit tests ï¿½?AdapterRegistry version selection (design.md Â§4.5, Â§5.1).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AdapterRegistry, UnsupportedDshVersionError, InvalidVersionError } from '../dist/registry.js';
@@ -21,7 +21,7 @@ test('TC-REG-01 exact version match returns mode exact', () => {
   assert.equal(mode, 'exact');
 });
 
-// TC-REG-02: no exact match â†?nearest-low fallback with warning.
+// TC-REG-02: no exact match ï¿½?nearest-low fallback with warning.
 // NOTE: the test plan literally wrote `^1.0.0` for adapter A with version
 // `1.5.0`, but `^1.0.0` (= >=1.0.0 <2.0.0) *does* satisfy 1.5.0, which would
 // be a range match, not a fallback. To genuinely exercise the fallback path
@@ -43,7 +43,7 @@ test('TC-REG-02 no exact match falls back to nearest lower adapter', () => {
   }
 });
 
-// TC-REG-03: empty registry â†?UnsupportedDshVersionError (too new).
+// TC-REG-03: empty registry ï¿½?UnsupportedDshVersionError (too new).
 test('TC-REG-03 empty registry throws UnsupportedDshVersionError', () => {
   const reg = new AdapterRegistry();
   assert.throws(
@@ -52,7 +52,7 @@ test('TC-REG-03 empty registry throws UnsupportedDshVersionError', () => {
   );
 });
 
-// TC-REG-04: version below all adapters â†?"too old" error, distinct message.
+// TC-REG-04: version below all adapters ï¿½?"too old" error, distinct message.
 test('TC-REG-04 version too old throws distinct too-old error', () => {
   const reg = new AdapterRegistry();
   reg.register(adapter('>=1.0.0', 'A'));
@@ -75,20 +75,20 @@ test('TC-BND-REG-01 empty registry select throws', () => {
   assert.throws(() => reg.select('1.0.0'), UnsupportedDshVersionError);
 });
 
-// TC-BND-REG-02: invalid version string â†?InvalidVersionError.
+// TC-BND-REG-02: invalid version string ï¿½?InvalidVersionError.
 test('TC-BND-REG-02 invalid version throws InvalidVersionError', () => {
   const reg = new AdapterRegistry();
   reg.register(adapter('^1.0.0'));
   assert.throws(() => reg.select('not-a-version'), InvalidVersionError);
 });
 
-// TC-BND-REG-03: overlapping ranges â†?narrowest wins; tie â†?last registered.
+// TC-BND-REG-03: overlapping ranges ï¿½?narrowest wins; tie ï¿½?last registered.
 test('TC-BND-REG-03 narrowest overlapping range wins', () => {
   const reg = new AdapterRegistry();
   reg.register(adapter('>=1.0.0 <2.0.0', 'A'));
   reg.register(adapter('>=1.5.0 <2.0.0', 'B'));
   const { factory } = reg.select('1.6.0');
-  assert.equal(factory.name, 'B'); // B is a subset of A â†?narrower
+  assert.equal(factory.name, 'B'); // B is a subset of A ï¿½?narrower
 });
 
 test('TC-BND-REG-03 tie on identical ranges picks last registered', () => {
@@ -99,7 +99,7 @@ test('TC-BND-REG-03 tie on identical ranges picks last registered', () => {
   assert.equal(factory.name, 'B'); // last registered wins
 });
 
-// Additional: version newer than all bounded adapters â†?fallback (rule 3),
+// Additional: version newer than all bounded adapters ï¿½?fallback (rule 3),
 // NOT a too-new error. Per design.md Â§3.1 rule 3, when no exact/range hit
 // exists but some adapter only covers versions below the real one, the
 // nearest-low fallback applies. A too-new error (rule 5) only happens with an
@@ -128,4 +128,56 @@ test('fallback picks nearest upper bound among lower candidates', () => {
   const { factory, mode } = reg.select('1.9.0');
   assert.equal(mode, 'fallback');
   assert.equal(factory.name, 'B'); // 1.3.0 is closer to 1.9.0 than 1.1.0
+});
+
+// TC-REG-05: pre-release of a covered release line (e.g. 0.1.1-rc.x) matches
+// via rule 2b â€” npm semver refuses pre-release versions unless the range has
+// a comparator with the same [major,minor,patch] tuple, so a literal
+// `>=0.1.0-rc.1 <2.0.0` never matches `0.1.1-rc.2` even though the release
+// line is covered. Rule 2b strips the tag and re-tests, so the compat shim
+// loads on ANY pre-release build of a covered line.
+test('TC-REG-05 pre-release of covered line matches via stripped release', () => {
+  const reg = new AdapterRegistry();
+  reg.register(adapter('>=0.1.0-rc.1 <2.0.0', 'dsh-1-x'));
+  const warns = [];
+  const orig = console.warn;
+  console.warn = (m) => warns.push(m);
+  try {
+    const { factory, mode } = reg.select('0.1.1-rc.2');
+    assert.equal(factory.name, 'dsh-1-x');
+    assert.equal(mode, 'range');
+    assert.ok(warns.some((w) => w.includes('pre-release') && w.includes('0.1.1')));
+  } finally {
+    console.warn = orig;
+  }
+});
+
+// TC-REG-06: pre-release above every adapter upper bound (future major, e.g.
+// 2.0.0-rc.1) falls back to the nearest adapter instead of a too-new error,
+// keeping the compat-shim promise of loading on any dsh version.
+test('TC-REG-06 pre-release above all adapters falls back', () => {
+  const reg = new AdapterRegistry();
+  reg.register(adapter('>=0.1.0-rc.1 <2.0.0', 'dsh-1-x'));
+  const warns = [];
+  const orig = console.warn;
+  console.warn = (m) => warns.push(m);
+  try {
+    const { factory, mode } = reg.select('2.0.0-rc.1');
+    assert.equal(factory.name, 'dsh-1-x');
+    assert.equal(mode, 'fallback');
+    assert.ok(warns.some((w) => w.includes('pre-release outside every adapter range')));
+  } finally {
+    console.warn = orig;
+  }
+});
+
+// TC-REG-07: too-old detection still fires for pre-release versions below
+// every adapter lower bound (rule 4 unchanged).
+test('TC-REG-07 pre-release below all adapters still too old', () => {
+  const reg = new AdapterRegistry();
+  reg.register(adapter('>=1.0.0', 'A'));
+  assert.throws(
+    () => reg.select('0.9.0-rc.1'),
+    (err) => err instanceof UnsupportedDshVersionError && err.kind === 'too-old',
+  );
 });
