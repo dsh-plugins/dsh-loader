@@ -850,7 +850,7 @@ function readLoaderConfig(opts?: { profileDir?: string }): LoaderConfig;
 ### 8.5 `LOADER_VERSION`
 
 ```ts
-export const LOADER_VERSION: string;  // '1.2.0'
+export const LOADER_VERSION: string;  // '1.3.0'
 ```
 
 ---
