@@ -199,3 +199,39 @@ test('TC-PKG-04 stable @dsh-plugin/dsh-loader/* names map to real dsh packages',
   assert.deepEqual(requires, ['@deepseek-ai/dsh-client-ui-primitives']);
   assert.equal(window.__loaded['test-plugin-stable'].icon.IconX, true);
 });
+
+// ── ensureDshModulesGlobal: legacy __DSH_MODULES__ shim (dsh 0.1.0-rc.8+) ──
+// Newer dsh stopped setting globalThis.__DSH_MODULES__ and instead hands the
+// ClientModuleSystem to the cordis client loader as ctx.loader.internal.
+// dshloader mirrors it back so legacy global readers keep working.
+
+test('ensureDshModulesGlobal keeps an existing __DSH_MODULES__ untouched', async () => {
+  const { ensureDshModulesGlobal } = await import('../../dist/client.js');
+  const existing = { import: async (s) => ({ spec: s }) };
+  globalThis.__DSH_MODULES__ = existing;
+  try {
+    const ok = ensureDshModulesGlobal({}, { loader: { internal: { import: async () => ({}) } } });
+    assert.equal(ok, true);
+    assert.equal(globalThis.__DSH_MODULES__, existing);
+  } finally {
+    delete globalThis.__DSH_MODULES__;
+  }
+});
+
+test('ensureDshModulesGlobal mirrors ctx.loader.internal onto the global when missing', async () => {
+  const { ensureDshModulesGlobal } = await import('../../dist/client.js');
+  delete globalThis.__DSH_MODULES__;
+  const internal = { import: async (s) => ({ spec: s }) };
+  const ok = ensureDshModulesGlobal({}, { loader: { internal } });
+  assert.equal(ok, true);
+  assert.equal(globalThis.__DSH_MODULES__, internal);
+  delete globalThis.__DSH_MODULES__;
+});
+
+test('ensureDshModulesGlobal returns false when neither source is available', async () => {
+  const { ensureDshModulesGlobal } = await import('../../dist/client.js');
+  delete globalThis.__DSH_MODULES__;
+  assert.equal(ensureDshModulesGlobal({}, { loader: {} }), false);
+  assert.equal(ensureDshModulesGlobal({}, undefined), false);
+  assert.equal(globalThis.__DSH_MODULES__, undefined);
+});

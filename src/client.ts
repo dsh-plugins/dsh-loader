@@ -43,6 +43,41 @@ declare global {
   // is read through `globalThis` by {@link ambientWindow} instead.
 }
 
+/** The client module-system surface legacy plugins read off `window.__DSH_MODULES__`. */
+interface DshModulesLike {
+  import(specifier: string): Promise<unknown>;
+}
+
+/**
+ * Compatibility shim: mount `window.__DSH_MODULES__` for plugins that read the
+ * client module system off the global.
+ *
+ * dsh ≤ 0.1.0-rc.7 set `globalThis.__DSH_MODULES__ = <ClientModuleSystem>`
+ * during web boot; 0.1.0-rc.8+ stopped exposing it globally and instead hands
+ * the same instance to the cordis client loader as `ctx.loader.internal`.
+ * Plugins built against the old global (e.g. dsh-better-sidebar's lazy chunks)
+ * break with "client module system unavailable" on the new versions. dshloader
+ * bridges the gap so those plugins need no change across every dsh version:
+ * when the global is missing but the cordis loader carries the module system,
+ * mirror it back onto the global.
+ *
+ * Returns true when the global is present after this call (either it already
+ * was, or we just mirrored it).
+ */
+export function ensureDshModulesGlobal(
+  win: DshLoaderWindowLike,
+  ctx: { loader?: { internal?: DshModulesLike } } | undefined,
+): boolean {
+  const scope = globalThis as { __DSH_MODULES__?: DshModulesLike };
+  if (scope.__DSH_MODULES__ !== undefined) return true;
+  const internal = ctx?.loader?.internal;
+  if (internal !== undefined && typeof internal.import === 'function') {
+    scope.__DSH_MODULES__ = internal;
+    return true;
+  }
+  return false;
+}
+
 /**
  * The ambient browser `window`, when this module runs in a browser-like realm.
  * Read off `globalThis` so no DOM lib and no global declaration is required.
@@ -379,10 +414,13 @@ export function installSettingsFetchInterceptor(
 // "invalid plugin, expect function or object with an \"apply\" method".
 // `installClient` mounts window.__dshLoader__, registers module aliases,
 // wires the client cordis ctx for `services.get`, and (when opted in)
-// installs the settings fetch interceptor.
+// installs the settings fetch interceptor. The __DSH_MODULES__ shim keeps
+// legacy global readers working on dsh 0.1.0-rc.8+ (see ensureDshModulesGlobal).
 export const name = '@dsh-plugin/dsh-loader'
 export const inject: string[] = []
-export function apply(ctx: { get?: (name: string) => any }) {
+export function apply(ctx: { get?: (name: string) => any; loader?: { internal?: DshModulesLike } }) {
   const win = ambientWindow();
-  if (win !== undefined) installClient({ window: win, clientCtx: ctx });
+  if (win === undefined) return;
+  ensureDshModulesGlobal(win, ctx);
+  installClient({ window: win, clientCtx: ctx });
 }
