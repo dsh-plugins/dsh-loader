@@ -22,7 +22,7 @@
  *
  * @module @dsh-plugin/dsh-loader/client
  */
-import { installClient } from './client.js';
+import { ensureDshModulesGlobal, installClient } from './client.js';
 import { createUi, type DshLoaderUi } from './ui/index.js';
 
 // Re-export the whole UI surface so a consumer's
@@ -32,6 +32,7 @@ export * from './ui/index.js';
 // Re-export the infrastructure surface consumers and tests rely on.
 export {
   createClientAPI,
+  ensureDshModulesGlobal,
   installClient,
   installSettingsFetchInterceptor,
   ModuleNotFoundError,
@@ -82,19 +83,30 @@ interface ClientContextLike {
   get?: (name: string) => unknown;
   effect?: (fn: () => unknown) => unknown;
   provide?: (name: string, value: unknown) => unknown;
+  /**
+   * The cordis plugin-loader service. dsh 0.1.0-rc.8+ carries the client
+   * module system here (`ctx.loader.internal`) instead of exposing it as the
+   * legacy `window.__DSH_MODULES__` global — see ensureDshModulesGlobal.
+   */
+  loader?: { internal?: { import(specifier: string): Promise<unknown> } };
 }
 
 /**
  * cordis client-plugin entry.
  *
- * Mounts the infrastructure first (so the `__ModuleLoader__` wrapper is in place
- * before any sibling bundle materialises), then the UI facade, then publishes it
- * both as the `dshLoaderUi` cordis service (ordered access) and on
- * `window.__dshLoader__.ui` (ad-hoc access from non-cordis code).
+ * Mirrors the client module system back onto `window.__DSH_MODULES__` first
+ * (legacy plugins' lazy chunks read the global; dsh 0.1.0-rc.8+ stopped
+ * installing it), then mounts the infrastructure (so the `__ModuleLoader__`
+ * wrapper is in place before any sibling bundle materialises), then the UI
+ * facade, then publishes it both as the `dshLoaderUi` cordis service
+ * (ordered access) and on `window.__dshLoader__.ui` (ad-hoc access from
+ * non-cordis code).
  */
 export function apply(ctx: ClientContextLike): void {
   const win = ambientWindow();
   if (win === undefined) return;
+
+  ensureDshModulesGlobal(win as never, ctx);
 
   const api = installClient({ window: win as never, clientCtx: ctx as never });
 
