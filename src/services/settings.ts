@@ -122,6 +122,70 @@ export function createSettingsAPI(opts: {
     return ctx.get('settings');
   }
 
+  /**
+   * Deferred namespace registrations. A host plugin may apply before the
+   * settings provider mounts — plugin activation order is not contractual,
+   * and 0.1.2 boots compositions concurrently — while its caller needs the
+   * owner scope synchronously. register() therefore returns a stand-in scope:
+   * reads yield the schema's declared default until the real registration
+   * flushes, watchers queue and replay onto the real scope, and an
+   * `ctx.inject(['settings'], …)` fiber (armed on the first deferral)
+   * performs the flush the moment the service appears. Deployments with no
+   * settings service keep the stand-in forever — the same graceful downgrade
+   * as before, except the namespace recovers when the service shows up late
+   * instead of never.
+   */
+  interface PendingRegistration {
+    ns: string;
+    schema: unknown;
+    options: unknown;
+    scope?: { get(): unknown; watch(callback: (value: never) => void): () => void };
+    watchers: Array<(value: never) => void>;
+    fallback: unknown;
+  }
+  const pendingRegistrations: PendingRegistration[] = [];
+  let flushArmed = false;
+
+  function defaultValueOf(schema: unknown): unknown {
+    // schemastery schemas are callable: invoking with undefined resolves the
+    // declared default. Unknown schema kinds degrade to an empty object; the
+    // real resolved value lands at flush.
+    try {
+      if (typeof schema === 'function') return (schema as (value: unknown) => unknown)(undefined);
+    } catch {
+      /* fall through to the empty-object fallback */
+    }
+    return {};
+  }
+
+  function flushRegistrations(): void {
+    const settings = getSettings();
+    if (settings === undefined || typeof settings.register !== 'function') return;
+    const queue = pendingRegistrations.splice(0);
+    for (const pending of queue) {
+      try {
+        const scope = settings.register(pending.ns, pending.schema, pending.options) as PendingRegistration['scope'];
+        pending.scope = scope;
+        for (const watcher of pending.watchers.splice(0)) scope?.watch(watcher);
+        console.info(`${LOG_PREFIX}:settings.register flushed deferred registration: ${pending.ns}`);
+      } catch (error) {
+        // Keep it queued; the next flush trigger retries.
+        pendingRegistrations.push(pending);
+        console.warn(`${LOG_PREFIX}:settings.register deferred flush failed for ${pending.ns}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    flushArmed = false;
+  }
+
+  function armFlush(): void {
+    if (flushArmed) return;
+    flushArmed = true;
+    const inject = (ctx as { inject?: (deps: string[], callback: () => void) => void }).inject;
+    if (typeof inject === 'function') {
+      inject.call(ctx, ['settings'], () => flushRegistrations());
+    }
+  }
+
   function filterNamespaces(views: NamespaceView[]) {
     if (exposeAllNamespaces) return views;
     return views.filter((v) => allowed.has(String(v.ns)));
@@ -140,15 +204,36 @@ export function createSettingsAPI(opts: {
      * a composition-time act, not a browser-facing read/write.
      */
     register(ns, schema, options) {
+      flushRegistrations();
       const settings = getSettings();
       if (settings === undefined || typeof settings.register !== 'function') {
-        console.warn(`${LOG_PREFIX}:settings.register settings service unavailable`);
-        return undefined;
+        const pending: PendingRegistration = {
+          ns: String(ns),
+          schema,
+          options,
+          watchers: [],
+          fallback: defaultValueOf(schema),
+        };
+        pendingRegistrations.push(pending);
+        armFlush();
+        console.info(`${LOG_PREFIX}:settings.register deferred until the settings service mounts: ${pending.ns}`);
+        return {
+          get: () => (pending.scope !== undefined ? pending.scope.get() : pending.fallback),
+          watch: (callback: (value: never) => void) => {
+            if (pending.scope !== undefined) return pending.scope.watch(callback);
+            pending.watchers.push(callback);
+            return () => {
+              const index = pending.watchers.indexOf(callback);
+              if (index >= 0) pending.watchers.splice(index, 1);
+            };
+          },
+        };
       }
       return settings.register(ns, schema, options);
     },
 
     describe(options: { redactSecrets?: boolean } = {}) {
+      flushRegistrations();
       const settings = getSettings();
       if (settings === undefined || typeof settings.describe !== 'function') {
         return [];
@@ -165,6 +250,7 @@ export function createSettingsAPI(opts: {
       section: any,
       expectedRevision?: number,
     ): Promise<SettingsResult> {
+      flushRegistrations();
       const settings = getSettings();
       if (settings === undefined) {
         return {

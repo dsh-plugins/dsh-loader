@@ -1,4 +1,4 @@
-// L1 unit tests �?Settings stable API (test-plan.md §4.2, §4.2b, §5.2, §6.1).
+// L1 unit tests �?Settings stable API (test-plan.md §4.2, §4.2b, §5.2, §6.1).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createSettingsAPI, DEFAULT_WEB_SETTINGS_NAMESPACES, toNamespaceView, settingsErrorToResult } from '../dist/services/settings.js';
@@ -45,7 +45,7 @@ test('TC-SET-02 update writes and returns SettingsResult ok', async () => {
   assert.ok(result.value.revision > 0);
 });
 
-// TC-SET-03: settings service unavailable �?internal error with dshloader prefix.
+// TC-SET-03: settings service unavailable �?internal error with dshloader prefix.
 test('TC-SET-03 settings unavailable returns internal error', async () => {
   const { ctx } = makeMockCtx();
   const api = createSettingsAPI({ ctx, exposeAllNamespaces: true });
@@ -175,19 +175,33 @@ test('TC-SET-04 settings.register proxies to real settings service', () => {
   assert.deepEqual(scope.get(), { enabled: true });
 });
 
-// TC-SET-05: register returns undefined + warns when settings service missing.
-test('TC-SET-05 settings.register returns undefined when service unavailable', () => {
-  const { ctx } = makeMockCtx();
+// TC-SET-05: register defers with a stand-in scope when the service is missing,
+// then flushes into a real registration once the service mounts (the flush is
+// opportunistic here because the mock ctx has no inject fiber).
+test('TC-SET-05 settings.register defers and flushes when the service mounts', () => {
+  const { ctx, registerService } = makeMockCtx();
   const api = createSettingsAPI({ ctx, exposeAllNamespaces: false });
-  const warns = [];
-  const orig = console.warn;
-  console.warn = (m) => warns.push(m);
-  let scope;
-  try {
-    scope = api.register('my-plugin', {});
-  } finally {
-    console.warn = orig;
-  }
-  assert.equal(scope, undefined);
-  assert.ok(warns.some((w) => /settings\.register settings service unavailable/.test(w)));
+  const schema = (value) => value ?? { enabled: false };
+  const scope = api.register('my-plugin', schema);
+  assert.ok(scope, 'a stand-in scope is returned instead of undefined');
+  assert.deepEqual(scope.get(), { enabled: false }, 'reads yield the schema default before flush');
+  const seen = [];
+  scope.watch((value) => seen.push(value));
+
+  let registeredNs = null;
+  const watchers = new Set();
+  registerService('settings', {
+    describe: () => [],
+    register(ns) {
+      registeredNs = ns;
+      return {
+        get: () => ({ enabled: true }),
+        watch: (cb) => { watchers.add(cb); return () => watchers.delete(cb); },
+      };
+    },
+  });
+  api.describe(); // opportunistic flush trigger
+  assert.equal(registeredNs, 'my-plugin', 'the deferred registration flushes to the real service');
+  assert.equal(watchers.size, 1, 'queued watchers replay onto the real scope');
+  assert.deepEqual(scope.get(), { enabled: true }, 'reads proxy to the real scope after flush');
 });

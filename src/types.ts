@@ -58,6 +58,8 @@ export interface HostAdapter {
 export interface HostAdapterConfig {
   exposeAllNamespaces?: boolean;
   hostPackageAliases?: Record<string, string>;
+  /** Extra client module-table aliases merged over the adapter's tables. */
+  clientPackageAliases?: Record<string, string>;
 }
 
 /** Result of AdapterRegistry.select(). */

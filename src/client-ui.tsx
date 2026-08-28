@@ -23,6 +23,8 @@
  * @module @dsh-plugin/dsh-loader/client
  */
 import { ensureDshModulesGlobal, installClient } from './client.js';
+import { installConversationEventsCompat } from './client-conversation-compat.js';
+import { installConnectionApiCompat } from './client-connection-api-compat.js';
 import { createUi, type DshLoaderUi } from './ui/index.js';
 
 // Re-export the whole UI surface so a consumer's
@@ -37,6 +39,8 @@ export {
   installSettingsFetchInterceptor,
   ModuleNotFoundError,
 } from './client.js';
+export { installConversationEventsCompat } from './client-conversation-compat.js';
+export { installConnectionApiCompat, buildLegacyApiProxy } from './client-connection-api-compat.js';
 
 /** cordis plugin name (matches the npm package name and the bundle id). */
 export const name = '@dsh-plugin/dsh-loader';
@@ -83,6 +87,8 @@ interface ClientContextLike {
   get?: (name: string) => unknown;
   effect?: (fn: () => unknown) => unknown;
   provide?: (name: string, value: unknown) => unknown;
+  /** Ordered dependent-fiber hook used by the conversationEvents bridge. */
+  inject?: (inject: string[], callback: (ctx: ClientContextLike) => unknown) => unknown;
   /**
    * The cordis plugin-loader service. dsh 0.1.0-rc.8+ carries the client
    * module system here (`ctx.loader.internal`) instead of exposing it as the
@@ -110,12 +116,21 @@ export function apply(ctx: ClientContextLike): void {
 
   const api = installClient({ window: win as never, clientCtx: ctx as never });
 
+  // Bridge the removed `conversationEvents` service name onto 0.1.2's
+  // `uiConversation.events` registry so consumers injecting the legacy name
+  // activate unchanged on every dsh line.
+  installConversationEventsCompat(ctx);
+
   ui = createUi();
   if (api !== undefined) (api as Record<string, unknown>).ui = ui;
   else if (win.__dshLoader__ !== undefined) win.__dshLoader__.ui = ui;
 
-  // Ordered access for consumers that inject the service.
-  ctx.provide?.(UI_SERVICE, ui);
+  // Ordered access for consumers that inject the service. Publication waits
+  // for the connection.api bridge: consumers gated on dshLoaderUi read
+  // `connection.api` during their own apply, so the legacy RPC proxy must be
+  // in place before the service appears (a synchronous no-op on hosts that
+  // already carry `connection.api`).
+  installConnectionApiCompat(ctx, () => ctx.provide?.(UI_SERVICE, ui));
 
   // Tear the observer down with the fiber when the host provides `effect`.
   ctx.effect?.(() => () => {

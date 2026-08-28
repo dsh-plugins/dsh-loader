@@ -15,7 +15,7 @@
 //
 // The module exports an `installClient` function for testability and runs an
 // IIFE at the bottom for the real browser bundle.
-import { LOADER_VERSION, LOG_PREFIX } from './version.js';
+import { LOADER_VERSION, LOG_PREFIX, BOOT_ALIAS_IDS_FLAG } from './version.js';
 import { clientAdapters } from './adapters/index.js';
 import { BRIDGE_PREFIX } from './adapters/dsh-1-x.js';
 
@@ -32,6 +32,8 @@ interface DshLoaderWindowLike {
   __DSHLOADER_CONFIG__?: { exposeAllNamespaces?: boolean };
   __dshNativeRequire__?: (spec: string) => any;
   __dshLoader__?: unknown;
+  /** Alias ids the boot injection (src/boot-injection.ts) already registered. */
+  [BOOT_ALIAS_IDS_FLAG]?: string[];
 }
 
 declare global {
@@ -281,8 +283,15 @@ export function installClient(opts: InstallClientOpts = {}) {
   }
 
   // Register module-alias factories with the client module loader (fix 1).
+  // Skip ids the boot-alias injection already registered: the live module
+  // system throws on a duplicate factory id, and the injected factories are
+  // registered before any entry materializes regardless of activation order.
+  const bootAliased = new Set(
+    Array.isArray(win[BOOT_ALIAS_IDS_FLAG]) ? win[BOOT_ALIAS_IDS_FLAG] : [],
+  );
   if (loader && typeof loader.load === 'function') {
     for (const [aliasId, target] of Object.entries(moduleAliases)) {
+      if (bootAliased.has(aliasId)) continue;
       loader.load({
         id: aliasId,
         factory: (require: (spec: string) => any) => {

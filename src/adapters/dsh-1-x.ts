@@ -15,6 +15,7 @@
 // auto-recycles them when the dshloader fiber unloads (design.md §4.4). No
 // custom dispose() is needed for v1's covered capabilities.
 import { LOG_PREFIX } from '../version.js';
+import { installBootAliasInjection } from '../boot-injection.js';
 import { toNamespaceView, settingsErrorToResult } from '../services/settings.js';
 import type { CordisContext, AdapterFactory as Factory, HostAdapterConfig } from '../types.js';
 
@@ -54,6 +55,36 @@ export const hostPackageAliases: Record<string, string> = {
   '@dsh-plugin/dsh-loader/subagent': '@deepseek-ai/dsh-subagent',
   '@dsh-plugin/dsh-loader/credentials': '@deepseek-ai/dsh-credentials',
   '@dsh-plugin/dsh-loader/compaction-basic': '@deepseek-ai/dsh-compaction-basic',
+};
+
+// Client-side deep-import module aliases (registered as module-table alias
+// factories): deep source imports that break when dsh ships no `src/`
+// (fix 1), plus the stable module name form (design.md §3.3.3).
+export const clientModuleAliases: Record<string, string> = {
+  '@deepseek-ai/dsh-client-runtime/src/client/sessions/context-provenance.ts':
+    '@deepseek-ai/dsh-client-runtime/client',
+  'dsh/runtime/context-provenance': '@deepseek-ai/dsh-client-runtime/client',
+};
+
+// Client-side stable package names → real dsh package names for dsh 1.x.
+// Plugins import from @dsh-plugin/dsh-loader/* subpaths (e.g.
+// '@dsh-plugin/dsh-loader/ui-primitives'); the boot-alias injection
+// (src/boot-injection.ts) pre-registers an alias factory per entry before
+// any client entry materializes, and the apply-time __ModuleLoader__ load
+// wrapper (installClient) covers late arrivals. When dsh renames a package,
+// only this table changes — plugin source and bundle stay the same.
+//
+// The table ALSO accepts old-real-name → new-real-name entries as a
+// transition measure for plugin bundles built before adopting stable names.
+export const clientPackageAliases: Record<string, string> = {
+  // Client UI component libraries
+  '@dsh-plugin/dsh-loader/ui-primitives': '@deepseek-ai/dsh-client-ui-primitives',
+  '@dsh-plugin/dsh-loader/ui-slots': '@deepseek-ai/dsh-client-ui-slots',
+  '@dsh-plugin/dsh-loader/web-react': '@deepseek-ai/dsh-client-web-react',
+  '@dsh-plugin/dsh-loader/schema-form': '@deepseek-ai/dsh-client-schema-form',
+  '@dsh-plugin/dsh-loader/ui-settings': '@deepseek-ai/dsh-client-ui-settings/client',
+  // Client runtime
+  '@dsh-plugin/dsh-loader/runtime': '@deepseek-ai/dsh-client-runtime/client',
 };
 
 /** Loosely-typed node:module NodeModule for the _resolveFilename hook. */
@@ -122,6 +153,21 @@ export function create(ctx: CordisContext, config: HostAdapterConfig = {}): Host
       );
       console.log(`${LOG_PREFIX} installed host package aliases: ${Object.keys(packageAliases).join(', ')}`);
     }
+
+    // --- client boot-alias injection (order-independent alias factories) ---
+    // dsh ≥ 0.1.2 imports every client entry concurrently, so a dependent can
+    // materialize before dshloader's client apply registers the alias
+    // factories. Injecting them into the index page removes the ordering
+    // dependency on every covered version.
+    const clientAliases = {
+      ...clientModuleAliases,
+      ...clientPackageAliases,
+      ...(config.clientPackageAliases ?? {}),
+    };
+    ctx.effect(
+      () => installBootAliasInjection(ctx, clientAliases),
+      'dshloader: client boot-alias injection',
+    );
 
     // --- settings bridge routes for the browser fetch path (fix 5, path 2) ---
     // Only registered when the profile explicitly opts in. The host-side
