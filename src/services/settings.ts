@@ -101,6 +101,69 @@ type SettingsAPIBuilder = SettingsAPI & {
   ): Promise<SettingsResult>;
 };
 
+// cordis FiberState numeric values (vendor/cordis/src/fiber.ts const enum:
+// PENDING=0 … DISPOSED=4, UNLOADING=5). dsh-settings@≤0.1.2-alpha.1 defined
+// the same two constants locally; cordis does not re-export the enum.
+const FIBER_DISPOSED = 4;
+const FIBER_UNLOADING = 5;
+
+/** True while the fiber owning `ctx` is unloading or already disposed. */
+function isFiberUnloading(ctx: any): boolean {
+  const state = ctx?.fiber?.state;
+  return state === FIBER_UNLOADING || state === FIBER_DISPOSED;
+}
+
+/**
+ * Faithful port of dsh-settings@≤0.1.2-alpha.1 `installSettingsSection`, for
+ * dsh ≥ 0.1.2-alpha.2 which dropped the module export while keeping the
+ * settings service `register()` contract identical
+ * (`register(ns, schema, { base, validate })` → scope `{ get, watch }`).
+ *
+ * Semantics preserved verbatim from the upstream implementation:
+ *   1. wait for the settings service via `ctx.inject` (never throws when the
+ *      service is missing — the consumer simply keeps its composition entry);
+ *   2. register `ns` with the composition `entry` as the `base` layer;
+ *   3. point the hooks' source thunk at the resolved scope;
+ *   4. on fiber teardown, restore the source to the plain entry and fire
+ *      `onChange` (skipped when the fiber is already unloading);
+ *   5. fire `onChange` on install and on every scope change.
+ *
+ * @returns `false` only when the consumer context cannot inject (not a cordis
+ *   context) — the caller then keeps using its composition entry, exactly as
+ *   with the old module-missing path.
+ */
+function installSettingsSectionFallback(
+  consumerCtx: any,
+  ns: unknown,
+  schema: unknown,
+  entry: unknown,
+  hooks: {
+    setSource(current: () => unknown): void;
+    onChange(): void;
+    validate?(value: unknown): void;
+  },
+): boolean {
+  if (typeof consumerCtx?.inject !== 'function') return false;
+  consumerCtx.inject(['settings'], (sctx: any) => {
+    const scope = sctx.settings.register(ns, schema, {
+      base: entry,
+      ...(hooks.validate === undefined ? {} : { validate: hooks.validate }),
+    });
+    hooks.setSource(() => scope.get());
+    sctx.effect(() => () => {
+      if (isFiberUnloading(consumerCtx)) return;
+      hooks.setSource(() => entry);
+      hooks.onChange();
+    });
+    hooks.onChange();
+    scope.watch(() => {
+      if (isFiberUnloading(consumerCtx)) return;
+      hooks.onChange();
+    });
+  });
+  return true;
+}
+
 /**
  * Build the `ctx.dshLoader.settings` stable API.
  */
@@ -303,15 +366,16 @@ export function createSettingsAPI(opts: {
 
     installSection(consumerCtx, ns, schema, entry, hooks) {
       const install = module?.installSettingsSection;
-      if (typeof install !== 'function') {
-        console.warn(
-          `${LOG_PREFIX}:settings.installSection — @deepseek-ai/dsh-settings is unavailable; ` +
-            'the consumer keeps its composition entry (no user-settings layer)',
-        );
-        return false;
+      if (typeof install === 'function') {
+        install(consumerCtx, ns, schema, entry, hooks);
+        return true;
       }
-      install(consumerCtx, ns, schema, entry, hooks);
-      return true;
+      // dsh ≥ 0.1.2-alpha.2 dropped the installSettingsSection module export
+      // (settingsNamespace → parseSettingsNamespace, also unexported) while
+      // keeping the settings service register() contract identical. Fall back
+      // to a faithful port of the alpha.1 semantics so optional-settings
+      // consumers keep their user layer on new versions.
+      return installSettingsSectionFallback(consumerCtx, ns, schema, entry, hooks);
     },
 
     isConflictError(error: unknown) {

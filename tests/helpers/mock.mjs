@@ -37,6 +37,12 @@ export function makeMockCtx(opts = {}) {
       };
     },
     on: () => () => {},
+    // Minimal cordis inject: fire immediately when all deps are present,
+    // otherwise stay pending (cordis would re-fire on dep changes; tests that
+    // need that register services before calling).
+    inject: (deps, callback) => {
+      if ((deps ?? []).every((d) => services.has(d))) callback(ctx);
+    },
   };
 
   // Direct property access for known service keys reads the same Map.

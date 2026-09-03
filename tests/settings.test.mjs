@@ -205,3 +205,141 @@ test('TC-SET-05 settings.register defers and flushes when the service mounts', (
   assert.equal(watchers.size, 1, 'queued watchers replay onto the real scope');
   assert.deepEqual(scope.get(), { enabled: true }, 'reads proxy to the real scope after flush');
 });
+
+// --- installSection: delegation + alpha.2 fallback (dsh >= 0.1.2-alpha.2 --- //
+// dropped the installSettingsSection module export; the loader ports the
+// alpha.1 semantics against the unchanged settings service register()).
+
+/** Mock settings service with register() returning a watchable scope. */
+function makeRegisterableSettings() {
+  const calls = [];
+  const scopes = [];
+  return {
+    calls,
+    scopes,
+    describe: () => [],
+    register(ns, schema, options) {
+      calls.push({ ns, schema, options });
+      const watchers = new Set();
+      const scope = {
+        value: options?.base,
+        get() { return scope.value; },
+        watch(cb) { watchers.add(cb); return () => watchers.delete(cb); },
+        fire(value) { scope.value = value; for (const cb of watchers) cb(value); },
+      };
+      scopes.push(scope);
+      return scope;
+    },
+  };
+}
+
+function makeHooks(entry) {
+  const changes = [];
+  const hooks = {
+    source: null,
+    changes,
+    setSource(current) { hooks.source = current; },
+    onChange() { changes.push(hooks.source ? hooks.source() : undefined); },
+  };
+  return hooks;
+}
+
+// TC-SET-06: when the module exports installSettingsSection, delegate verbatim.
+test('TC-SET-06 installSection delegates to the dsh-settings module export', () => {
+  const delegated = [];
+  const module = {
+    installSettingsSection(...args) { delegated.push(args); },
+  };
+  const { ctx } = makeMockCtx();
+  const api = createSettingsAPI({ ctx, exposeAllNamespaces: false, module });
+  const hooks = makeHooks({ enabled: false });
+  const ok = api.installSection(ctx, 'my-plugin', { type: 'object' }, { enabled: false }, hooks);
+  assert.equal(ok, true);
+  assert.equal(delegated.length, 1);
+  assert.equal(delegated[0][1], 'my-plugin');
+  assert.equal(delegated[0][3].enabled, false);
+  assert.equal(delegated[0][4], hooks, 'hooks object passed through untouched');
+});
+
+// TC-SET-07: fallback registers with base=entry and wires source/onChange/watch.
+test('TC-SET-07 installSection fallback registers base layer and live scope', () => {
+  const settings = makeRegisterableSettings();
+  const { ctx, registerService } = makeMockCtx();
+  registerService('settings', settings);
+  const api = createSettingsAPI({ ctx, exposeAllNamespaces: false });
+  const entry = { enabled: false, model: 'a' };
+  const hooks = makeHooks(entry);
+  const validate = (v) => v;
+  const ok = api.installSection(ctx, 'my-plugin', { type: 'object' }, entry, { ...hooks, validate });
+
+  assert.equal(ok, true);
+  assert.equal(settings.calls.length, 1);
+  assert.equal(settings.calls[0].ns, 'my-plugin');
+  assert.deepEqual(settings.calls[0].options.base, entry);
+  assert.equal(settings.calls[0].options.validate, validate);
+  assert.deepEqual(hooks.source(), entry, 'source reads through the registered scope');
+  assert.deepEqual(hooks.changes, [entry], 'onChange fired once on install');
+
+  settings.scopes[0].fire({ enabled: true, model: 'b' });
+  assert.deepEqual(hooks.changes[1], { enabled: true, model: 'b' }, 'scope watch fires onChange');
+  assert.deepEqual(hooks.source(), { enabled: true, model: 'b' });
+});
+
+// TC-SET-08: fallback teardown restores the entry source and fires onChange.
+test('TC-SET-08 installSection fallback teardown restores entry source', () => {
+  const settings = makeRegisterableSettings();
+  const { ctx, registerService, effects } = makeMockCtx();
+  registerService('settings', settings);
+  const api = createSettingsAPI({ ctx, exposeAllNamespaces: false });
+  const entry = { enabled: false };
+  const hooks = makeHooks(entry);
+  api.installSection(ctx, 'my-plugin', { type: 'object' }, entry, hooks);
+  settings.scopes[0].fire({ enabled: true });
+  assert.equal(hooks.changes.length, 2);
+
+  const teardown = effects.at(-1);
+  assert.ok(teardown?.dispose, 'the fallback registers a fiber teardown effect');
+  teardown.dispose();
+  assert.deepEqual(hooks.source(), entry, 'source falls back to the composition entry');
+  assert.deepEqual(hooks.changes.at(-1), entry, 'onChange fired after restore');
+});
+
+// TC-SET-09: teardown is inert while the fiber is unloading (cordis FiberState 4/5).
+test('TC-SET-09 installSection fallback teardown skips unloading fiber', () => {
+  const settings = makeRegisterableSettings();
+  const { ctx, registerService, effects } = makeMockCtx();
+  ctx.fiber = { state: 2 };
+  registerService('settings', settings);
+  const api = createSettingsAPI({ ctx, exposeAllNamespaces: false });
+  const entry = { enabled: false };
+  const hooks = makeHooks(entry);
+  api.installSection(ctx, 'my-plugin', { type: 'object' }, entry, hooks);
+  settings.scopes[0].fire({ enabled: true });
+
+  ctx.fiber.state = 5; // UNLOADING
+  effects.at(-1).dispose();
+  assert.deepEqual(hooks.source(), { enabled: true }, 'source untouched during unload');
+  assert.equal(hooks.changes.length, 2, 'no extra onChange during unload');
+
+  ctx.fiber.state = 4; // DISPOSED
+  settings.scopes[0].fire({ enabled: 'x' });
+  assert.equal(hooks.changes.length, 2, 'watch inert once disposed');
+});
+
+// TC-SET-10: fallback without an injectable context reports not-installed.
+test('TC-SET-10 installSection fallback without inject returns false', () => {
+  const api = createSettingsAPI({ ctx: {}, exposeAllNamespaces: false });
+  const hooks = makeHooks({});
+  const ok = api.installSection({}, 'my-plugin', {}, {}, hooks);
+  assert.equal(ok, false);
+});
+
+// TC-SET-11: fallback defers when the settings service has not mounted yet.
+test('TC-SET-11 installSection fallback pends until settings service mounts', () => {
+  const { ctx } = makeMockCtx(); // no settings service registered
+  const api = createSettingsAPI({ ctx, exposeAllNamespaces: false });
+  const hooks = makeHooks({ enabled: false });
+  const ok = api.installSection(ctx, 'my-plugin', {}, { enabled: false }, hooks);
+  assert.equal(ok, true, 'wiring installed (pending the service)');
+  assert.equal(hooks.changes.length, 0, 'nothing fired before the service mounts');
+});

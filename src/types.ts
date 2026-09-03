@@ -102,16 +102,19 @@ export interface SettingsAPI {
    */
   namespace(id: string): any;
   /**
-   * Install the canonical optional-settings consumer wiring (delegates to dsh's
-   * `installSettingsSection`): register `ns` with `entry` as the `base` layer,
-   * point the hooks' source thunk at the resolved scope while a settings service
-   * exists, and fall back to `entry` when it goes away.
+   * Install the canonical optional-settings consumer wiring: register `ns`
+   * with `entry` as the `base` layer, point the hooks' source thunk at the
+   * resolved scope while a settings service exists, and fall back to `entry`
+   * when it goes away.
    *
-   * Delegated rather than reimplemented — the fallback and fiber semantics are
-   * real upstream behaviour, not something a shim should copy.
+   * Delegates to dsh's `installSettingsSection` when the module exports it
+   * (dsh ≤ 0.1.2-alpha.1); on dsh ≥ 0.1.2-alpha.2 (which dropped the export
+   * but kept the settings service register() contract identical) the facade
+   * runs a faithful port of the same upstream semantics instead.
    *
-   * @returns `true` when the wiring was installed, `false` when dsh-settings is
-   *   unavailable (the caller then keeps using its composition entry).
+   * @returns `true` when the wiring was installed, `false` when the caller's
+   *   context cannot inject the settings service (the caller then keeps using
+   *   its composition entry).
    */
   installSection<T>(
     ctx: any,
