@@ -75,6 +75,23 @@ test('dump-config returns not-ok when dsh CLI unavailable', () => {
   }
 });
 
+// dump-config: a failed spawn is never silent (issue #1) — when the dsh CLI
+// cannot start, the output carries the spawn error instead of being empty.
+test('dump-config surfaces spawn error when dsh CLI cannot start', () => {
+  const prof = makeProfile('web');
+  const origHome = process.env.DSH_HOME;
+  process.env.DSH_HOME = prof.home;
+  try {
+    const { ok, output } = dumpConfig('web');
+    if (ok) return; // dsh really installed on this machine — nothing to assert
+    assert.ok(output.length > 0, 'failed dump-config must not print empty output');
+    assert.match(output, /spawn error|not recognized|not found|ENOENT/i);
+  } finally {
+    process.env.DSH_HOME = origHome;
+    prof.cleanup();
+  }
+});
+
 // info: prints loader + dsh version without throwing.
 test('info prints loader and dsh version', () => {
   const prof = makeProfile('web');

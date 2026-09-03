@@ -133,8 +133,17 @@ export function dumpConfig(profileName: string): { ok: boolean; output: string }
   const result = spawnSync('dsh', ['--profile', profileName, '--dump-config'], {
     encoding: 'utf8',
     timeout: 60_000,
+    // Windows cannot CreateProcess npm's shim directly ('dsh' → ENOENT,
+    // 'dsh.cmd' → EINVAL); let cmd.exe resolve it. Node ≥20.12 escapes the
+    // arg array for cmd.exe, and the profile directory must exist anyway, so
+    // this is safe with a user-supplied profile name. (DEP0190 warning is
+    // cosmetic.)
+    shell: process.platform === 'win32',
   });
-  const output = (result.stdout ?? '') + (result.stderr ?? '');
+  // Never fail silently: surface the spawn error itself when the process
+  // could not even start (stdout/stderr stay null in that case).
+  const spawnError = result.error ? `\n${LOG_PREFIX} spawn error: ${result.error.message}` : '';
+  const output = (result.stdout ?? '') + (result.stderr ?? '') + spawnError;
   return { ok: result.status === 0, output };
 }
 
