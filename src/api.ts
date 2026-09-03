@@ -45,7 +45,6 @@ export function createHostAPI(opts: {
     adapter,
     exposeAllNamespaces = false,
     whitelist,
-    hostPackageAliases = {},
     registryModules,
   } = opts;
 
@@ -74,11 +73,11 @@ export function createHostAPI(opts: {
   // Runtime host package-name alias registration. The adapter's apply()
   // installs the static set at boot; this method lets plugins add more
   // aliases at runtime (e.g. for packages the adapter didn't know about).
-  const runtimeHostAliases = new Map(Object.entries(hostPackageAliases));
+  // installHostPackageAliases maintains ONE shared hook over a mutable map
+  // (Symbol.for-registered), so repeat calls mutate the map in place instead
+  // of stacking _resolveFilename wrappers.
   const registerPackageAlias = (oldName: string, newName: string): void => {
-    runtimeHostAliases.set(oldName, newName);
-    // Re-install the hook with the updated map.
-    installHostPackageAliases(Object.fromEntries(runtimeHostAliases));
+    void installHostPackageAliases({ [oldName]: newName });
   };
 
   return {

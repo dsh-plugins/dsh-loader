@@ -107,6 +107,10 @@ interface ClientContextLike {
  * facade, then publishes it both as the `dshLoaderUi` cordis service
  * (ordered access) and on `window.__dshLoader__.ui` (ad-hoc access from
  * non-cordis code).
+ *
+ * Every patch installClient makes (the load wrapper, the settings fetch
+ * interceptor) is registered through `ctx.effect`, so fiber unload / HMR
+ * reverts them instead of stacking wrappers on the shared window.
  */
 export function apply(ctx: ClientContextLike): void {
   const win = ambientWindow();
@@ -114,7 +118,11 @@ export function apply(ctx: ClientContextLike): void {
 
   ensureDshModulesGlobal(win as never, ctx);
 
-  const api = installClient({ window: win as never, clientCtx: ctx as never });
+  const api = installClient({
+    window: win as never,
+    clientCtx: ctx as never,
+    effect: typeof ctx.effect === 'function' ? (fn) => ctx.effect!(fn) : undefined,
+  });
 
   // Bridge the removed `conversationEvents` service name onto 0.1.2's
   // `uiConversation.events` registry so consumers injecting the legacy name

@@ -29,6 +29,21 @@ export function dshHome(): string {
 }
 
 export function profileDir(profileName: string): string {
+  // Mirror dsh's own profile-name validation (app-boot profile.ts
+  // resolveProfileDir): reject separators and dot segments so a crafted name
+  // cannot escape $DSH_HOME/profiles — setupProfile WRITES into the resolved
+  // directory, so an unchecked `../../…` is a path-traversal write.
+  if (
+    profileName === '' ||
+    profileName.includes('/') ||
+    profileName.includes('\\') ||
+    profileName === '.' ||
+    profileName === '..' ||
+    // The launcher-maintained flat module fallback lives at this sibling path.
+    profileName === 'node_modules'
+  ) {
+    throw new Error(`${LOG_PREFIX} invalid profile name ${JSON.stringify(profileName)}`);
+  }
   return join(dshHome(), 'profiles', profileName);
 }
 

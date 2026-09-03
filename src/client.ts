@@ -214,6 +214,25 @@ interface InstallClientOpts {
   hostBridgePrefix?: string;
   packageAliases?: Record<string, string>;
   clientCtx?: { get?: (name: string) => any };
+  /**
+   * cordis effect hook (`ctx.effect`): the load wrapper and fetch
+   * interceptor register their disposers through it so fiber unload / HMR
+   * tears the patches down instead of leaking them. Absent in bare test
+   * environments, where patches simply live for the process.
+   */
+  effect?: (fn: () => (() => void) | void) => unknown;
+}
+
+// Cross-realm registry keys (Symbol.for so a reloaded bundle instance shares
+// them): the load-wrapper state and the alias-factory ids we registered.
+const LOAD_WRAP_KEY = Symbol.for('@dsh-plugin/dsh-loader:load-wrap');
+const ALIAS_FACTORY_IDS_KEY = Symbol.for('@dsh-plugin/dsh-loader:alias-factories');
+
+type ModuleLoaderLoad = (handoff: { id: string; factory: (require: (spec: string) => any) => any }) => unknown;
+
+interface LoadWrapState {
+  original: ModuleLoaderLoad;
+  ours: ModuleLoaderLoad;
 }
 
 /**
@@ -263,35 +282,62 @@ export function installClient(opts: InstallClientOpts = {}) {
   });
   win.__dshLoader__ = api;
 
+  // Patch disposers — handed to the cordis effect hook when the caller
+  // provides one, so HMR / fiber unload reverts every patch below.
+  const disposers: Array<() => void> = [];
+
   // Wrap __ModuleLoader__.load so every factory's require() function
   // applies package-name aliases before hitting the module table. This
   // must happen BEFORE registering module-alias factories below, because
   // those factories also receive the wrapped require.
+  //
+  // Idempotent: a Symbol.for-registered wrap state survives bundle reloads,
+  // so a second installClient (HMR re-apply before the old fiber's disposer
+  // ran, or a duplicate bundle) reuses the existing wrapper instead of
+  // stacking another layer.
   const loader = win.__ModuleLoader__;
   if (loader && typeof loader.load === 'function') {
-    const originalLoad = loader.load.bind(loader);
-    loader.load = function dshloaderLoad(handoff: { id: string; factory: (require: (spec: string) => any) => any }) {
-      const wrappedFactory = (require: (spec: string) => any) => {
-        const aliasedRequire = (spec: string) => {
-          const mapped = packageAliases.get(spec);
-          return require(mapped ?? spec);
+    const holder = loader as typeof loader & { [LOAD_WRAP_KEY]?: LoadWrapState };
+    const existing = holder[LOAD_WRAP_KEY];
+    if (existing !== undefined && loader.load === existing.ours) {
+      // Already wrapped by a live dshloader instance — nothing to do.
+    } else {
+      const original = loader.load;
+      const wrapped = function dshloaderLoad(handoff: { id: string; factory: (require: (spec: string) => any) => any }) {
+        const wrappedFactory = (require: (spec: string) => any) => {
+          const aliasedRequire = (spec: string) => {
+            const mapped = packageAliases.get(spec);
+            return require(mapped ?? spec);
+          };
+          return handoff.factory(aliasedRequire);
         };
-        return handoff.factory(aliasedRequire);
+        return original.call(loader, { id: handoff.id, factory: wrappedFactory });
       };
-      return originalLoad({ id: handoff.id, factory: wrappedFactory });
-    };
+      loader.load = wrapped;
+      holder[LOAD_WRAP_KEY] = { original, ours: wrapped };
+      disposers.push(() => {
+        if (loader.load === wrapped) loader.load = original;
+        if (holder[LOAD_WRAP_KEY]?.ours === wrapped) delete holder[LOAD_WRAP_KEY];
+      });
+    }
   }
 
   // Register module-alias factories with the client module loader (fix 1).
   // Skip ids the boot-alias injection already registered: the live module
   // system throws on a duplicate factory id, and the injected factories are
   // registered before any entry materializes regardless of activation order.
+  // Also skip ids a previous installClient run of THIS bundle registered
+  // (HMR re-apply), tracked on the window via Symbol.for.
+  const winRecord = win as DshLoaderWindowLike & { [ALIAS_FACTORY_IDS_KEY]?: string[] };
+  const registeredByUs = new Set(
+    Array.isArray(winRecord[ALIAS_FACTORY_IDS_KEY]) ? winRecord[ALIAS_FACTORY_IDS_KEY] : [],
+  );
   const bootAliased = new Set(
     Array.isArray(win[BOOT_ALIAS_IDS_FLAG]) ? win[BOOT_ALIAS_IDS_FLAG] : [],
   );
   if (loader && typeof loader.load === 'function') {
     for (const [aliasId, target] of Object.entries(moduleAliases)) {
-      if (bootAliased.has(aliasId)) continue;
+      if (bootAliased.has(aliasId) || registeredByUs.has(aliasId)) continue;
       loader.load({
         id: aliasId,
         factory: (require: (spec: string) => any) => {
@@ -303,12 +349,22 @@ export function installClient(opts: InstallClientOpts = {}) {
           return mod;
         },
       });
+      registeredByUs.add(aliasId);
     }
+    winRecord[ALIAS_FACTORY_IDS_KEY] = [...registeredByUs];
   }
 
   if (exposeAllNamespaces) {
-    installSettingsFetchInterceptor(win, bridgePrefix);
+    // The interceptor returns its disposer — keep it so fiber unload /
+    // HMR restores the native fetch instead of leaking the wrapper.
+    disposers.push(installSettingsFetchInterceptor(win, bridgePrefix));
     console.warn(`${LOG_PREFIX} exposeAllNamespaces enabled: bypassing official settings whitelist`);
+  }
+
+  if (typeof opts.effect === 'function' && disposers.length > 0) {
+    opts.effect(() => () => {
+      for (const dispose of disposers.splice(0)) dispose();
+    });
   }
 
   return api;
@@ -427,9 +483,13 @@ export function installSettingsFetchInterceptor(
 // legacy global readers working on dsh 0.1.0-rc.8+ (see ensureDshModulesGlobal).
 export const name = '@dsh-plugin/dsh-loader'
 export const inject: string[] = []
-export function apply(ctx: { get?: (name: string) => any; loader?: { internal?: DshModulesLike } }) {
+export function apply(ctx: {
+  get?: (name: string) => any;
+  loader?: { internal?: DshModulesLike };
+  effect?: (fn: () => (() => void) | void) => unknown;
+}) {
   const win = ambientWindow();
   if (win === undefined) return;
   ensureDshModulesGlobal(win, ctx);
-  installClient({ window: win, clientCtx: ctx });
+  installClient({ window: win, clientCtx: ctx, effect: ctx.effect?.bind(ctx) as InstallClientOpts['effect'] });
 }

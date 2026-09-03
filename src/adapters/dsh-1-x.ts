@@ -92,17 +92,47 @@ interface NodeModuleLike {
   _resolveFilename?: (...args: any[]) => string;
 }
 
+/** Shared state of the single _resolveFilename hook (see below). */
+interface HostAliasHookState {
+  map: Map<string, string>;
+  /** The resolver our hook delegates to; mutable so a broken chain can be
+   * re-pointed at the current top without adding a wrapper. */
+  original: (...args: any[]) => string;
+  hooked: (...args: any[]) => string;
+  refs: number;
+  /** Reentrancy guard: if `original` somehow resolves back into our hook
+   * (a third party chained on top of us), break the cycle by delegating
+   * unmapped. */
+  active: boolean;
+}
+
+// Cross-module-instance registry: HMR or a second dshloader copy must share
+// the ONE hook instead of stacking wrappers. (v1.3.3 captured
+// `Module._resolveFilename` per install, so every registerPackageAlias call
+// wrapped the previous wrapper — the chain grew unboundedly and a non-topmost
+// dispose never restored anything.)
+const HOST_ALIAS_HOOK_KEY = Symbol.for('@dsh-plugin/dsh-loader:host-alias-hook');
+
+function hostAliasHookState(): HostAliasHookState | undefined {
+  return (globalThis as Record<symbol, unknown>)[HOST_ALIAS_HOOK_KEY] as HostAliasHookState | undefined;
+}
+
 /**
- * Install a Module._resolveFilename hook that maps old package names to
- * new ones for CJS require() calls. Returns a dispose function that
- * removes the hook.
+ * Ensure the single Module._resolveFilename hook exists and merge `aliases`
+ * into its shared map. Never adds a wrapper: repeat calls (runtime
+ * `registerPackageAlias`, HMR re-apply) only mutate the map. When the chain
+ * top was replaced without chaining into us (the mapping silently stops
+ * applying), the hook is re-pointed at the current top — still the same
+ * single wrapper, no growth.
+ *
+ * Returns a dispose function that rolls back exactly the entries this call
+ * set (when unchanged since) and restores the original resolver once the
+ * last registrant disposes.
  */
 export async function installHostPackageAliases(
   aliases: Record<string, string>,
 ): Promise<() => void> {
   const entries = Object.entries(aliases);
-  if (entries.length === 0) return () => {};
-  const aliasMap = new Map(entries);
   // Lazy-import Module to avoid loading it in browser/test contexts.
   let Module: NodeModuleLike | undefined;
   try {
@@ -113,15 +143,68 @@ export async function installHostPackageAliases(
     return () => {};
   }
   if (!Module || typeof Module._resolveFilename !== 'function') return () => {};
-  const original = Module._resolveFilename;
-  const hooked = function dshloaderResolve(this: unknown, request: string, parent: unknown, ...rest: unknown[]) {
-    const mapped = aliasMap.get(request);
-    if (mapped !== undefined) return original.call(this, mapped, parent, ...rest);
-    return original.call(this, request, parent, ...rest);
-  };
-  Module._resolveFilename = hooked;
+  if (entries.length === 0 && hostAliasHookState() === undefined) return () => {};
+
+  let state = hostAliasHookState();
+  if (state === undefined) {
+    const map = new Map<string, string>();
+    const hookState: HostAliasHookState = {
+      map,
+      original: Module._resolveFilename as (...args: any[]) => string,
+      hooked: undefined as unknown as (...args: any[]) => string,
+      refs: 0,
+      active: false,
+    };
+    // Reads hookState.original dynamically so re-pointing takes effect
+    // without replacing the installed function identity.
+    hookState.hooked = function dshloaderResolve(this: unknown, request: string, ...rest: unknown[]) {
+      const mapped = map.get(request) ?? request;
+      if (hookState.active) return hookState.original.call(this, mapped, ...rest);
+      hookState.active = true;
+      try {
+        return hookState.original.call(this, mapped, ...rest);
+      } finally {
+        hookState.active = false;
+      }
+    };
+    Module._resolveFilename = hookState.hooked;
+    (globalThis as Record<symbol, unknown>)[HOST_ALIAS_HOOK_KEY] = hookState;
+    state = hookState;
+  } else if (Module._resolveFilename !== state.hooked) {
+    // The chain top was replaced without delegating into our hook (so the
+    // mapping silently stopped applying). Re-point the SAME hook at the
+    // current top — never wrap a new layer.
+    state.original = Module._resolveFilename as (...args: any[]) => string;
+    Module._resolveFilename = state.hooked;
+  }
+  const hookState = state;
+  const moduleRef = Module;
+
+  // Merge entries, remembering previous values so dispose can restore them.
+  const previous = new Map<string, string | undefined>();
+  for (const [key, value] of entries) {
+    if (!previous.has(key)) previous.set(key, hookState.map.get(key));
+    hookState.map.set(key, value);
+  }
+  hookState.refs++;
+
+  let disposed = false;
   return () => {
-    if (Module && Module._resolveFilename === hooked) Module._resolveFilename = original;
+    if (disposed) return;
+    disposed = true;
+    for (const [key, old] of previous) {
+      // Roll back only values unchanged since our install — a later caller's
+      // override is theirs to keep.
+      if (hookState.map.get(key) === aliases[key]) {
+        if (old === undefined) hookState.map.delete(key);
+        else hookState.map.set(key, old);
+      }
+    }
+    hookState.refs--;
+    if (hookState.refs === 0 && moduleRef._resolveFilename === hookState.hooked) {
+      moduleRef._resolveFilename = hookState.original;
+      delete (globalThis as Record<symbol, unknown>)[HOST_ALIAS_HOOK_KEY];
+    }
   };
 }
 

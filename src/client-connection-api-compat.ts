@@ -33,6 +33,9 @@ export const REMOTE_SERVICE = 'remote';
 export interface ConnectionApiCompatContext {
   get?(name: string): unknown;
   inject?(inject: string[], callback: (ctx: ConnectionApiCompatContext) => unknown): unknown;
+  /** cordis effect hook: when present, the bridge assignment and the
+   * fallback timer are torn down with the fiber (HMR-safe). */
+  effect?(fn: () => (() => void) | void): unknown;
 }
 
 /** Bare RpcResult the 0.1.2 Typert remote resolves to. */
@@ -279,6 +282,23 @@ export function installConnectionApiCompat(
     onReady();
     return true;
   }
+
+  // Reversible-patch bookkeeping: the bridge writes `connection.api` from an
+  // async inject fiber and arms a fallback timer — both must unwind with the
+  // caller fiber (HMR / unload), not leak onto the shared connection handle.
+  let bridged: { conn: ConnectionHandleLike; api: unknown } | undefined;
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  if (typeof ctx.effect === 'function') {
+    ctx.effect(() => () => {
+      if (bridged !== undefined && bridged.conn.api === bridged.api) {
+        delete bridged.conn.api;
+      }
+      bridged = undefined;
+      for (const timer of timers) clearTimeout(timer);
+      timers.clear();
+    });
+  }
+
   // Stage A: wait for the connection handle alone — it exists on every host
   // version. The remote.* nested services below are 0.1.2+ only, so they must
   // NOT share this fiber: on a 0.1.0/0.1.1 host they never materialize and a
@@ -305,11 +325,13 @@ export function installConnectionApiCompat(
       (inner) => {
         const innerConn = inner.get?.(CONNECTION_SERVICE) as ConnectionHandleLike | undefined;
         if (innerConn !== undefined && innerConn.api === undefined) {
-          innerConn.api = buildLegacyApiProxy({
+          const proxy = buildLegacyApiProxy({
             llm: inner.get?.(`${REMOTE_SERVICE}.llm`) as RemoteLike['llm'],
             session: inner.get?.(`${REMOTE_SERVICE}.session`) as RemoteLike['session'],
             settings: inner.get?.(`${REMOTE_SERVICE}.settings`) as RemoteLike['settings'],
           });
+          innerConn.api = proxy;
+          bridged = { conn: innerConn, api: proxy };
         }
         readyOnce();
       },
@@ -318,8 +340,12 @@ export function installConnectionApiCompat(
     // never fires) must not hold dependents forever: release them unbridged
     // after a generous window; their per-call reads then fail loudly instead
     // of the whole boot stalling on a service that will never exist.
-    const timer = setTimeout(readyOnce, 15000);
+    const timer = setTimeout(() => {
+      timers.delete(timer);
+      readyOnce();
+    }, 15000);
     (timer as { unref?: () => void }).unref?.();
+    timers.add(timer);
   });
   return false;
 }
