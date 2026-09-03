@@ -1,6 +1,6 @@
 {
   "name": "@dsh-plugin/dsh-loader",
-  "version": "1.3.3",
+  "version": "1.3.4",
   "description": "Runtime compatibility shim for dsh (DeepSeek Harness) cordis bundle plugins: decouples third-party plugins from real dsh internal service names, module paths, and RPC details via a version-aware adapter registry.",
   "type": "module",
   "repository": {
