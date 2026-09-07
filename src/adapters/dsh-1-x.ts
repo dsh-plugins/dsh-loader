@@ -252,6 +252,12 @@ export function create(ctx: CordisContext, config: HostAdapterConfig = {}): Host
       'dshloader: client boot-alias injection',
     );
 
+    // --- Session.events accessor polyfill (dsh ≥ 0.1.2-alpha.2) ---
+    ctx.effect(
+      () => installSessionEventsAccessor(ctx),
+      'dshloader: Session.events accessor polyfill',
+    );
+
     // --- settings bridge routes for the browser fetch path (fix 5, path 2) ---
     // Only registered when the profile explicitly opts in. The host-side
     // stable API (ctx.dshLoader.settings.*) is unaffected by this gate and
@@ -278,6 +284,72 @@ interface HostAdapterType {
   name: string;
   apply: () => Promise<void>;
   dispose: () => void;
+}
+
+/**
+ * Restore the pre-0.1.2 `Session.events` read-only accessor.
+ *
+ * dsh-session 0.1.2（随 dsh 0.1.2-alpha.2 起捆绑进 meta 包）把 `Session` 的
+ * `events` 只读访问器换成了 `snapshotEvents(fromSeq?, toSeqExclusive?)` 方法
+ * （无参全量调用复用宿主自身的缓存快照，语义与旧访问器一致）。直接迭代
+ * `session.events` 的旧插件（dsh-code-review 等）会在 `agent/created` 同步
+ * 监听器里抛 `session.events is not iterable`，被创建路径包装后整个
+ * session/create 失败。
+ *
+ * 这里按特性探测在 Session 原型上补回访问器（委托 snapshotEvents()）：
+ * 访问器已存在（旧版 dsh）或 snapshotEvents 缺失（更远的未来版本）时都不
+ * 安装。已存活会话立即补齐（live reload 场景）；之后创建的会话经
+ * `session/created` 钩子补齐——创建流程中 session/created 先于
+ * agent/created 派发（agent-loop 的 enter → sessions.announce →
+ * agents.announce），因此 agent/created 监听器读到的是旧契约。
+ *
+ * 返回的 disposer 摘除监听器并移除我们安装的访问器（identity 校验，
+ * 不碰他人后来覆盖的实现）。
+ */
+export function installSessionEventsAccessor(ctx: CordisContext): () => void {
+  /** Our getter, identity-checked on dispose. */
+  const eventsGetter = function events(this: { snapshotEvents(): unknown }): unknown {
+    return this.snapshotEvents();
+  };
+  /** Prototypes we patched (normally one; a dual-instance runtime may show two). */
+  const patched = new Set<object>();
+
+  const ensure = (session: unknown): void => {
+    if (session === null || typeof session !== 'object') return;
+    const proto = Object.getPrototypeOf(session) as object | null;
+    if (proto === null || patched.has(proto)) return;
+    // 旧版自带访问器——不动。
+    if (Object.getOwnPropertyDescriptor(proto, 'events') !== undefined) return;
+    // 没有委托目标——保持原状，让旧插件响亮失败而不是静默拿到空数组。
+    if (typeof (session as { snapshotEvents?: unknown }).snapshotEvents !== 'function') return;
+    Object.defineProperty(proto, 'events', {
+      configurable: true,
+      enumerable: false,
+      get: eventsGetter,
+    });
+    patched.add(proto);
+    console.log(`${LOG_PREFIX} polyfilled Session.events accessor via snapshotEvents() (dsh-session 0.1.2+)`);
+  };
+
+  // 已存活会话（live patch reload 时插件重挂但会话不重建）。
+  const store = ctx.get('sessions') as { list?: () => unknown } | undefined;
+  const live = store?.list?.();
+  if (Array.isArray(live)) for (const session of live) ensure(session);
+
+  const disposeListener = typeof ctx.on === 'function'
+    ? ctx.on('session/created', ensure, { global: true })
+    : undefined;
+
+  return () => {
+    if (typeof disposeListener === 'function') disposeListener();
+    for (const proto of patched) {
+      const descriptor = Object.getOwnPropertyDescriptor(proto, 'events');
+      if (descriptor?.get === eventsGetter) {
+        delete (proto as Record<string, unknown>).events;
+      }
+    }
+    patched.clear();
+  };
 }
 
 /**

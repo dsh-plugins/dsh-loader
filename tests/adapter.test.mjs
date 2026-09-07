@@ -200,3 +200,108 @@ test('TC-HOST-PKG-03 stable @dsh-plugin/dsh-loader/* maps to real dsh packages',
     Module._resolveFilename = original;
   }
 });
+
+// ---- Session.events accessor polyfill (dsh >= 0.1.2-alpha.2) ----
+
+/** Session double shaped like dsh-session 0.1.2: snapshotEvents method, no events accessor. */
+function makeSession012(log) {
+  class Session012 {
+    constructor(events) { this.log = events; }
+    snapshotEvents() { return Object.freeze([...this.log]); }
+  }
+  return new Session012(log);
+}
+
+function disposeAll(effects) {
+  for (const entry of effects) entry.dispose?.();
+}
+
+// TC-SESS-EV-01: missing accessor is polyfilled via snapshotEvents on the
+// prototype; already-live sessions (store.list) are covered immediately.
+test('TC-SESS-EV-01 events accessor polyfilled for snapshotEvents-only sessions', async () => {
+  const session = makeSession012([{ seq: 0, type: 'turn/start' }]);
+  const { ctx, effects, registerService } = makeMockCtx();
+  registerService('sessions', { list: () => [session] });
+
+  const adapter = createDsh1xAdapter(ctx, { exposeAllNamespaces: false });
+  await adapter.apply();
+  try {
+    assert.equal(session.events.length, 1);
+    assert.equal(session.events[0].type, 'turn/start');
+    assert.ok(Object.isFrozen(session.events));
+    // Prototype-level, non-enumerable — matches the old class accessor shape.
+    const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(session), 'events');
+    assert.equal(typeof descriptor.get, 'function');
+    assert.equal(descriptor.enumerable, false);
+  } finally {
+    disposeAll(effects);
+  }
+});
+
+// TC-SESS-EV-02: a session created later is covered through session/created
+// (dispatched before agent/created in the real creation flow).
+test('TC-SESS-EV-02 session/created hook polyfills later sessions', async () => {
+  const { ctx, effects, listeners, registerService } = makeMockCtx();
+  registerService('sessions', { list: () => [] });
+
+  const adapter = createDsh1xAdapter(ctx, { exposeAllNamespaces: false });
+  await adapter.apply();
+  try {
+    const hook = listeners.filter((l) => l.name === 'session/created');
+    assert.equal(hook.length, 1);
+    assert.deepEqual(hook[0].options, { global: true });
+    const session = makeSession012([]);
+    hook[0].listener(session);
+    assert.deepEqual([...session.events], []);
+  } finally {
+    disposeAll(effects);
+  }
+});
+
+// TC-SESS-EV-03: prototype already exposing events is left untouched.
+test('TC-SESS-EV-03 existing events accessor is not overridden', async () => {
+  class SessionLegacy {
+    get events() { return 'legacy'; }
+  }
+  const session = new SessionLegacy();
+  const { ctx, effects, registerService } = makeMockCtx();
+  registerService('sessions', { list: () => [session] });
+
+  const adapter = createDsh1xAdapter(ctx, { exposeAllNamespaces: false });
+  await adapter.apply();
+  try {
+    assert.equal(session.events, 'legacy');
+  } finally {
+    disposeAll(effects);
+  }
+  assert.equal(session.events, 'legacy'); // dispose must not delete a pre-existing accessor
+});
+
+// TC-SESS-EV-04: no snapshotEvents -> no polyfill (fail loud, never silent empty).
+test('TC-SESS-EV-04 without snapshotEvents the accessor is not installed', async () => {
+  const session = { id: 'bare' };
+  const { ctx, effects, registerService } = makeMockCtx();
+  registerService('sessions', { list: () => [session] });
+
+  const adapter = createDsh1xAdapter(ctx, { exposeAllNamespaces: false });
+  await adapter.apply();
+  try {
+    assert.equal(session.events, undefined);
+    assert.equal('events' in session, false);
+  } finally {
+    disposeAll(effects);
+  }
+});
+
+// TC-SESS-EV-05: dispose removes only our accessor (identity-checked).
+test('TC-SESS-EV-05 dispose removes the installed accessor', async () => {
+  const session = makeSession012([]);
+  const { ctx, effects, registerService } = makeMockCtx();
+  registerService('sessions', { list: () => [session] });
+
+  const adapter = createDsh1xAdapter(ctx, { exposeAllNamespaces: false });
+  await adapter.apply();
+  assert.ok(Array.isArray(session.events));
+  disposeAll(effects);
+  assert.equal('events' in session, false);
+});

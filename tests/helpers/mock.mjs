@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os';
 export function makeMockCtx(opts = {}) {
   const services = opts.services ?? new Map();
   const effects = [];
+  const listeners = [];
 
   const ctx = {
     get: (name) => services.get(name),
@@ -36,7 +37,14 @@ export function makeMockCtx(opts = {}) {
         entry.dispose?.();
       };
     },
-    on: () => () => {},
+    on: (name, listener, options) => {
+      const entry = { name, listener, options };
+      listeners.push(entry);
+      return () => {
+        const index = listeners.indexOf(entry);
+        if (index >= 0) listeners.splice(index, 1);
+      };
+    },
     // Minimal cordis inject: fire immediately when all deps are present,
     // otherwise stay pending (cordis would re-fire on dep changes; tests that
     // need that register services before calling).
@@ -65,7 +73,7 @@ export function makeMockCtx(opts = {}) {
 
   const registerService = (name, value) => services.set(name, value);
 
-  return { ctx, services, effects, registerService };
+  return { ctx, services, effects, listeners, registerService };
 }
 
 /** Build a mock settings service with describe/update/replace/mutate. */
