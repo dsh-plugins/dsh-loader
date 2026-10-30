@@ -1,6 +1,6 @@
 {
   "name": "@dsh-plugin/dsh-loader",
-  "version": "1.3.5",
+  "version": "2.0.0",
   "description": "Runtime compatibility shim for dsh (DeepSeek Harness) cordis bundle plugins: decouples third-party plugins from real dsh internal service names, module paths, and RPC details via a version-aware adapter registry.",
   "type": "module",
   "repository": {
@@ -9,7 +9,10 @@
   },
   "main": "dist/index.js",
   "exports": {
-    ".": "./dist/index.js",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
     "./client": {
       "types": "./lib/types/client-ui.d.ts",
       "default": "./lib/client.js"
@@ -23,15 +26,51 @@
     "./web-react": "./src/stable/web-react.js",
     "./schema-form": "./src/stable/schema-form.js",
     "./runtime": "./src/stable/runtime.js",
-    "./tools": "./src/stable/tools.js",
-    "./llm": "./src/stable/llm.js",
-    "./agent": "./src/stable/agent.js",
-    "./settings": "./src/stable/settings.js",
-    "./timeout": "./src/stable/timeout.js",
-    "./subagent": "./src/stable/subagent.js",
-    "./credentials": "./src/stable/credentials.js",
-    "./compaction-basic": "./src/stable/compaction-basic.js",
-    "./patch": "./dist/patch.js"
+    "./tools": {
+      "types": "./src/stable/tools.d.ts",
+      "import": "./src/stable/tools.js",
+      "require": "./src/stable/tools.cjs"
+    },
+    "./llm": {
+      "types": "./src/stable/llm.d.ts",
+      "import": "./src/stable/llm.js",
+      "require": "./src/stable/llm.cjs"
+    },
+    "./agent": {
+      "types": "./src/stable/agent.d.ts",
+      "import": "./src/stable/agent.js",
+      "require": "./src/stable/agent.cjs"
+    },
+    "./settings": {
+      "types": "./src/stable/settings.d.ts",
+      "import": "./src/stable/settings.js",
+      "require": "./src/stable/settings.cjs"
+    },
+    "./timeout": {
+      "types": "./src/stable/timeout.d.ts",
+      "import": "./src/stable/timeout.js",
+      "require": "./src/stable/timeout.cjs"
+    },
+    "./subagent": {
+      "types": "./src/stable/subagent.d.ts",
+      "import": "./src/stable/subagent.js",
+      "require": "./src/stable/subagent.cjs"
+    },
+    "./credentials": {
+      "types": "./src/stable/credentials.d.ts",
+      "import": "./src/stable/credentials.js",
+      "require": "./src/stable/credentials.cjs"
+    },
+    "./compaction-basic": {
+      "types": "./src/stable/compaction-basic.d.ts",
+      "import": "./src/stable/compaction-basic.js",
+      "require": "./src/stable/compaction-basic.cjs"
+    },
+    "./patch": "./dist/patch.js",
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "default": "./dist/config.js"
+    }
   },
   "bin": {
     "dshloader": "./bin/dshloader.mjs"
@@ -45,7 +84,10 @@
     "lib/types",
     "cordis.patch.yml",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "README.zh_CN.md",
+    "docs",
+    "examples/config-plugin"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.client.types.json && tsdown --config tsdown.client.config.mjs",
@@ -58,10 +100,12 @@
     "test:l2": "node --test \"tests/module/*.test.mjs\"",
     "test:l3": "node --test \"tests/integration/*.test.mjs\"",
     "test:ui": "vitest run",
-    "setup": "node bin/dshloader.mjs setup"
+    "setup": "node bin/dshloader.mjs setup",
+    "test:package": "node scripts/test-package.mjs",
+    "test:browser": "node tests/browser/server.mjs"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=24.9.0"
   },
   "dependencies": {
     "@icon-park/react": "^1.4.2",

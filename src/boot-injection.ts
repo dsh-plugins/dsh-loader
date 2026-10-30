@@ -25,6 +25,7 @@
 // re-registering the same factories (the live module system throws on
 // duplicate factory ids).
 
+import type { BootDescriptor } from './bootstrap.js';
 import { BOOT_ALIAS_IDS_FLAG } from './version.js';
 import type { CordisContext } from './types.js';
 
@@ -46,10 +47,12 @@ const INDEX_INJECT_EVENT = 'webserver/index-inject';
  * @param aliases - alias module id → real module id.
  * @returns JavaScript source for an inline classic script.
  */
-export function buildBootAliasScript(aliases: Record<string, string>): string {
-  const table = JSON.stringify(aliases);
+export function buildBootAliasScript(aliases: Record<string, string>, boot?: BootDescriptor): string {
+  const safe = (value: unknown) => JSON.stringify(value).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+  const table = safe(aliases);
   return `!function(){
 var w=window,F=${JSON.stringify(BOOT_ALIAS_IDS_FLAG)};
+${boot ? `w.__DSHLOADER_BOOT__=${safe(boot)};w.__DSHLOADER_VERSION__=w.__DSHLOADER_BOOT__.dshVersion;w.__DSHLOADER_CONFIG__={exposeAllNamespaces:w.__DSHLOADER_BOOT__.exposeAllNamespaces};` : ''}
 if(w[F])return;
 var A=${table};
 var ids=Object.keys(A);
@@ -57,7 +60,9 @@ function reg(loader){
 for(var i=0;i<ids.length;i++){
 var id=ids[i];
 loader.load({id:id,factory:function(t,a){return function(require){
-var mod=require(t);
+var target=w.__DSHLOADER_ALIAS_MAP__?w.__DSHLOADER_ALIAS_MAP__.get(a):t;
+if(!target)throw new Error("dshloader: alias disposed: "+a);
+var mod=require(target);
 if(a.endsWith("context-provenance.ts")||a.endsWith("context-provenance"))return{contextProvenance:mod.contextProvenance};
 return mod;
 }}(A[id],id)});
@@ -98,9 +103,10 @@ Object.defineProperty(w,"__ModuleLoader__",{configurable:true,enumerable:true,wr
 export function installBootAliasInjection(
   ctx: CordisContext,
   aliases: Record<string, string>,
+  boot?: BootDescriptor,
 ): () => void {
-  if (Object.keys(aliases).length === 0 || typeof ctx.on !== 'function') return () => {};
-  const row = { kind: 'script', placement: 'head', text: buildBootAliasScript(aliases) };
+  if (typeof ctx.on !== 'function') return () => {};
+  const row = { kind: 'script', placement: 'head', text: buildBootAliasScript(aliases, boot) };
   const listener = (table: unknown[]): void => {
     table.push(row);
   };

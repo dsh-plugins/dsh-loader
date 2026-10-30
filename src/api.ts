@@ -1,3 +1,5 @@
+import { ConfigStore } from './services/config.js';
+import { ownedScope, type ResourceOwner } from './lifecycle.js';
 // DshLoaderHostAPI construction (design.md §4.1 / §4.4).
 //
 // `createHostAPI` builds the `ctx.dshLoader` object exposed to other plugins.
@@ -14,7 +16,7 @@ import { createRegistryAPI, type RegistryAPI, type RegistryModules } from './ser
 import { createLlmAPI, type LlmAPI } from './services/llm.js';
 import { createDshSymbolsAPI, type DshSymbolsAPI } from './services/dsh-symbols.js';
 import { createPatchAPI, type PatchAPI } from './patch.js';
-import { installHostPackageAliases } from './adapters/dsh-1-x.js';
+import { installHostPackageAliases } from './host-aliases.js';
 import type {
   CordisContext,
   AdapterFactory,
@@ -37,6 +39,7 @@ export function createHostAPI(opts: {
   whitelist?: Set<string>;
   hostPackageAliases?: Record<string, string>;
   registryModules?: RegistryModules;
+  configStore?: ConfigStore;
 }): HostAPI {
   const {
     ctx,
@@ -64,11 +67,11 @@ export function createHostAPI(opts: {
   // `patch` is environment-agnostic and version-independent (the protocol never
   // touches dsh shapes), so no adapter override seam is needed. `registry` DOES
   // name private dsh shapes, so adapters may replace it wholesale.
-  const patch: PatchAPI = createPatchAPI();
+  const patch: PatchAPI = createPatchAPI(ctx);
   const registry: RegistryAPI =
     (adapter?.registry as RegistryAPI | undefined) ?? createRegistryAPI({ ctx, modules: registryModules });
-  const llm: LlmAPI = createLlmAPI({ module: registryModules?.llm });
-  const dsh: DshSymbolsAPI = createDshSymbolsAPI({ modules: registryModules });
+  const llm: LlmAPI = adapter?.llm ?? createLlmAPI({ module: registryModules?.llm });
+  const dsh: DshSymbolsAPI = adapter?.dsh ?? createDshSymbolsAPI({ modules: registryModules });
 
   // Runtime host package-name alias registration. The adapter's apply()
   // installs the static set at boot; this method lets plugins add more
@@ -76,12 +79,15 @@ export function createHostAPI(opts: {
   // installHostPackageAliases maintains ONE shared hook over a mutable map
   // (Symbol.for-registered), so repeat calls mutate the map in place instead
   // of stacking _resolveFilename wrappers.
-  const registerPackageAlias = (oldName: string, newName: string): void => {
-    void installHostPackageAliases({ [oldName]: newName });
+  const resources = ownedScope(ctx);
+  const registerPackageAlias = async (oldName: string, newName: string, owner?: ResourceOwner): Promise<() => void> => {
+    const scope = owner ? ownedScope(owner) : resources;
+    return scope.add(await installHostPackageAliases({ [oldName]: newName }));
   };
 
   return {
     ...base,
+    config: opts.configStore ?? new ConfigStore(undefined),
     settings,
     web,
     services,

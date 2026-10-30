@@ -1,3 +1,4 @@
+import { createBootDescriptor } from '../../dist/bootstrap.js';
 // L2 module tests โ€?client fetch interceptor (design.md ยง4.7, ยง5.3).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -34,7 +35,7 @@ test('TC-CLI-RPC-01 exposeAllNamespaces off leaves describe response untouched',
     fetchCalls += 1;
     return fakeResponse(JSON.stringify(official));
   });
-  installClient({ window: win, exposeAllNamespaces: false });
+  installClient({ window: win, boot: createBootDescriptor('0.1.5-rc.3', 'dsh-0.1.5', false) });
   const res = await win.fetch('/api/settings.describe');
   const body = await res.json();
   assert.deepEqual(body, official); // unchanged
@@ -51,7 +52,7 @@ test('TC-CLI-RPC-01b exposeAllNamespaces on merges non-whitelisted namespaces', 
     }
     return fakeResponse(JSON.stringify(official));
   });
-  installClient({ window: win, exposeAllNamespaces: true });
+  installClient({ window: win, boot: createBootDescriptor('0.1.5-rc.3', 'dsh-0.1.5', true) });
   const res = await win.fetch('/api/settings.describe');
   const body = await res.json();
   const nss = body.result.value.namespaces.map((n) => n.ns);
@@ -73,7 +74,7 @@ test('TC-CLI-RPC-01c non-whitelisted write echoes rpcId in server-response envel
     if (url === '/api/dshloader/settings/update') return fakeResponse(JSON.stringify(writeResult));
     return fakeResponse(JSON.stringify({ ok: false }));
   });
-  installClient({ window: win, exposeAllNamespaces: true });
+  installClient({ window: win, boot: createBootDescriptor('0.1.5-rc.3', 'dsh-0.1.5', true) });
 
   // Prime officialExposed by calling describe first.
   await (await win.fetch('/api/settings.describe')).json();
@@ -103,7 +104,7 @@ test('TC-CLI-RPC-01c failure still echoes rpcId', async () => {
     if (url === '/api/dshloader/settings/update') return fakeResponse(JSON.stringify(writeResult));
     return fakeResponse(JSON.stringify({ ok: false }));
   });
-  installClient({ window: win, exposeAllNamespaces: true });
+  installClient({ window: win, boot: createBootDescriptor('0.1.5-rc.3', 'dsh-0.1.5', true) });
   await (await win.fetch('/api/settings.describe')).json();
   const res = await win.fetch('/api/settings.update', {
     method: 'POST',
@@ -122,7 +123,7 @@ test('TC-CLI-RPC-02 non-target requests pass through to originalFetch', async ()
     originalCalled = true;
     return fakeResponse(JSON.stringify({ ok: true, echo: String(input) }));
   });
-  installClient({ window: win, exposeAllNamespaces: true });
+  installClient({ window: win, boot: createBootDescriptor('0.1.5-rc.3', 'dsh-0.1.5', true) });
   const res = await win.fetch('/api/other', { method: 'GET' });
   const body = await res.json();
   assert.equal(originalCalled, true);
@@ -132,7 +133,7 @@ test('TC-CLI-RPC-02 non-target requests pass through to originalFetch', async ()
 // TC-BND-CLI-02: third party overrides window.fetch โ?interceptor still wraps.
 test('TC-BND-CLI-02 interceptor wraps original fetch when overwritten', async () => {
   const win = makeWindowWithFetch(async () => fakeResponse(JSON.stringify({ ok: true })));
-  installClient({ window: win, exposeAllNamespaces: true });
+  installClient({ window: win, boot: createBootDescriptor('0.1.5-rc.3', 'dsh-0.1.5', true) });
   // third party wraps the current (intercepted) fetch โ€?describe still routed.
   const official = { result: { value: { namespaces: [{ ns: 'shell' }] } } };
   const bridge = { ok: true, namespaces: [{ ns: 'task-board', schema: {}, value: {}, applies: {}, secrets: [], revision: 0 }] };

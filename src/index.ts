@@ -1,12 +1,16 @@
+import { ConfigStore } from './services/config.js';
+import { installConfigBridge } from './services/config-bridge.js';
+import { ownedScope } from './lifecycle.js';
+import { createBootDescriptor } from './bootstrap.js';
 // dshloader host bundle entry (design.md §7.3 / §4.4).
 //
 // Exports the cordis function-plugin shape (`name`, `inject`, `apply`) and
 // wires the adapter registry → version detection → stable API onto
 // `ctx.dshLoader`. Service aliases / bridge routes register through
 // ctx.reflect.provide / ctx.effect so cordis auto-recycles them on fiber
-// unload — no manual dispose is required for v1's covered capabilities.
+// unload — each owner scope releases its resources on unload.
 import { LOADER_VERSION, LOG_PREFIX } from './version.js';
-import { readFileSync, realpathSync, readdirSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AdapterRegistry, detectDshVersion, UnsupportedDshVersionError } from './registry.js';
@@ -23,25 +27,15 @@ export const inject = ['webServer'];
 interface LoaderConfig {
   exposeAllNamespaces: boolean;
   hostPackageAliases?: Record<string, string>;
+  profileDir?: string;
 }
 
 /** The npm package name profiles depend on (used by profile detection). */
-const LOADER_PACKAGE = '@dsh-plugin/dsh-loader';
 
-/**
- * Locate the profile directory this loader instance is mounted into.
- *
- * Strategy, in order:
- *   1. Self-location: under pnpm the entry's realpath resolves inside
- *      `<profileDir>/node_modules/...`, so walk up for an ancestor
- *      `node_modules` whose parent manifest declares `dsh.profile`.
- *   2. Dependency scan (covers `link:` installs whose realpath escapes the
- *      profile): the profile manifests under `$DSH_HOME/profiles` that depend
- *      on this package. Unambiguous only when exactly one matches — with
- *      several, per-profile manifest config stays unread rather than reading
- *      the wrong profile (env and cordis entry config still apply).
- *
- * @returns the absolute profile directory, or undefined when undetectable.
+
+/** Locate a profile only from this installation's ancestor manifest.
+ * Runtime Loader.baseUrl and an explicit profileDir take precedence in applyAdapter.
+ * DSH_HOME profile scanning cannot identify the running profile and is never used.
  */
 export function detectProfileDir(opts: { moduleUrl?: string; dshHome?: string } = {}): string | undefined {
   try {
@@ -66,28 +60,7 @@ export function detectProfileDir(opts: { moduleUrl?: string; dshHome?: string } 
     /* fall through to the dependency scan */
   }
 
-  const home = opts.dshHome ?? process.env.DSH_HOME;
-  if (home === undefined || home.trim() === '') return undefined;
-  try {
-    const profilesDir = join(resolve(home), 'profiles');
-    const matches = readdirSync(profilesDir, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && entry.name !== 'node_modules')
-      .filter((entry) => {
-        try {
-          const manifest = JSON.parse(readFileSync(join(profilesDir, entry.name, 'package.json'), 'utf8')) as {
-            dependencies?: Record<string, unknown>;
-            devDependencies?: Record<string, unknown>;
-          };
-          const deps = { ...manifest.dependencies, ...manifest.devDependencies };
-          return Object.keys(deps).includes(LOADER_PACKAGE);
-        } catch {
-          return false;
-        }
-      });
-    if (matches.length === 1) return join(profilesDir, matches[0]!.name);
-  } catch {
-    /* ignore */
-  }
+
   return undefined;
 }
 
@@ -128,13 +101,14 @@ export function readLoaderConfig(opts: { profileDir?: string; config?: Partial<L
   return {
     exposeAllNamespaces: envOn || entryOn || pkgOn,
     hostPackageAliases: opts.config?.hostPackageAliases,
+    profileDir: opts.config?.profileDir ?? dir,
   };
 }
 
 interface AdapterSelectionResult {
   registry: AdapterRegistry;
   factory: AdapterFactory;
-  mode: 'exact' | 'range' | 'fallback';
+  mode: 'exact' | 'range';
   dshVersion: string;
 }
 
@@ -145,9 +119,10 @@ interface AdapterSelectionResult {
 export function selectAdapter(opts: {
   dshVersion?: string;
   registry?: AdapterRegistry;
+  profileDir?: string;
 } = {}): AdapterSelectionResult {
   const reg = opts.registry ?? registerHostAdapters(new AdapterRegistry());
-  const version = opts.dshVersion ?? detectDshVersion();
+  const version = opts.dshVersion ?? detectDshVersion({ profileDir: opts.profileDir });
   if (version === undefined) {
     throw new UnsupportedDshVersionError(
       `${LOG_PREFIX} could not detect dsh version; set DSHLOADER_DSH_VERSION or install @deepseek-ai/dsh`,
@@ -165,19 +140,32 @@ export function selectAdapter(opts: {
  */
 export async function applyAdapter(
   ctx: CordisContext,
-  opts: { dshVersion?: string; config?: LoaderConfig; registry?: AdapterRegistry } = {},
+  opts: { dshVersion?: string; config?: Partial<LoaderConfig>; registry?: AdapterRegistry } = {},
 ): Promise<{ api: ReturnType<typeof createHostAPI>; factory: AdapterFactory; mode: string; dshVersion: string }> {
-  const config = opts.config ?? readLoaderConfig();
-  const selection = selectAdapter({ dshVersion: opts.dshVersion, registry: opts.registry });
+  const runtimeUrl = (ctx as CordisContext & { baseUrl?: string }).baseUrl
+    ?? ctx.get('loader')?.ctx?.baseUrl
+    ?? ctx.get('loader')?.config?.baseUrl;
+  let runtimeProfile: string | undefined;
+  if (typeof runtimeUrl === 'string' && runtimeUrl.startsWith('file:')) {
+    const candidate = fileURLToPath(new URL('.', runtimeUrl));
+    try { if (JSON.parse(readFileSync(join(candidate, 'package.json'), 'utf8')).dsh?.profile !== undefined) runtimeProfile = candidate; } catch { /* explicit configuration remains available */ }
+  }
+  const config = readLoaderConfig({ config: opts.config, profileDir: opts.config?.profileDir ?? runtimeProfile });
+  const selection = selectAdapter({ dshVersion: opts.dshVersion, registry: opts.registry, profileDir: config.profileDir });
   const { factory, mode, dshVersion } = selection;
 
-  const adapter = factory.create(ctx, config as HostAdapterConfig);
+  const resources = ownedScope(ctx);
+  const store = new ConfigStore(config.profileDir);
+  resources.add(() => store.dispose());
+  const adapter = factory.create(ctx, { ...config, boot: createBootDescriptor(dshVersion, factory.name, config.exposeAllNamespaces) } as HostAdapterConfig);
+  resources.add(() => adapter.dispose?.());
+  try {
   await adapter.apply?.();
 
   // Optional dsh modules the registry facade proxies (sandbox escalation
   // targets, permission-preset folding). Absent modules degrade that facade
   // method to a logged no-op — see services/registry.ts.
-  const registryModules = await preloadRegistryModules();
+  const registryModules = adapter.modules;
 
   const api = createHostAPI({
     ctx,
@@ -187,7 +175,10 @@ export async function applyAdapter(
     exposeAllNamespaces: config.exposeAllNamespaces,
     hostPackageAliases: config.hostPackageAliases,
     registryModules,
+    configStore: store,
   });
+  if (!adapter.authorizeConfig) throw new Error('dshloader: adapter lacks browser access control');
+  resources.add(installConfigBridge(api.web, store, adapter.authorizeConfig));
   ctx.reflect.provide('dshLoader', api);
 
   console.log(`${LOG_PREFIX} loaded adapter ${factory.name} for dsh ${dshVersion} (mode: ${mode})`);
@@ -199,6 +190,7 @@ export async function applyAdapter(
   }
 
   return { api, factory, mode, dshVersion };
+  } catch (error) { resources.dispose(); throw error; }
 }
 
 /** cordis function-plugin entry point. */
@@ -210,7 +202,10 @@ export async function apply(ctx: CordisContext, entryConfig?: Partial<LoaderConf
   // Merge the cordis entry row's `config:` with env/profile-manifest sources —
   // the entry config is per-profile by construction, so it outranks the
   // best-effort located profile manifest.
-  await applyAdapter(ctx, { config: readLoaderConfig({ config: entryConfig }) });
+  await applyAdapter(ctx, { config: entryConfig });
 }
 
 export { LOADER_VERSION };
+
+export type { HostAPI, CordisContext, SettingsAPI, WebAPI, ServicesAPI, HostAdapter, HostAdapterConfig, AdapterFactory } from './types.js';
+export type { ConfigAPI, ConfigHandle, ConfigTemplate, ConfigField, ConfigSnapshot } from './config.js';

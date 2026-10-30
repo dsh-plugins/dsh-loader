@@ -16,13 +16,12 @@ Endpoint (default `GET /api/dsh-aux-state`, override via patch `config.path`):
 {
   "approvePluginInstalled": false,
   "presetNames": ["default", "yolo"],
-  "loader": { "loaderVersion": "1.0.0", "dshVersion": "0.1.0-rc.7", "adapter": ">=0.1.0-rc.1 <2.0.0" }
+  "loader": { "loaderVersion": "2.0.0", "dshVersion": "0.1.5-rc.3", "adapter": "0.1.5" }
 }
 ```
 
 The llm/stream review-router half of approve-router.js is intentionally not
-carried over: dshloader v1's stable surface covers web / services / settings,
-not llm waterfalls.
+carried over; this example focuses on web / services / settings. See the 2.0 API documentation for llm and dsh capabilities.
 
 ## Install into a profile
 

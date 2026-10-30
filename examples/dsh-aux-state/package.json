@@ -1,6 +1,6 @@
 {
   "name": "dsh-aux-state-loader",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "description": "dshloader-API transcription of @dsh-plugin/dsh-auxiliary's approve-state endpoint: reports whether the approve-for-me plugin is installed, reading only ctx.dshLoader (web/services/settings) instead of dsh internals.",
   "type": "module",
   "main": "lib/index.js",
@@ -15,7 +15,7 @@
     "README.md"
   ],
   "peerDependencies": {
-    "@dsh-plugin/dsh-loader": "^1.0.0"
+    "@dsh-plugin/dsh-loader": "^2.0.0"
   },
   "dsh": {
     "bundle": {

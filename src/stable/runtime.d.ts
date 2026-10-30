@@ -1,1 +1,1 @@
-export * from '@deepseek-ai/dsh-client-runtime/client';
+export { contextProvenance, contextForm, sessionRecallLabels } from '../../lib/types/ui/client-compat.js';

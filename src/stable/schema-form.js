@@ -1,2 +1,1 @@
-// Stable re-export: @dsh-plugin/dsh-loader/schema-form
-export * from '@deepseek-ai/dsh-client-schema-form';
+export { rehydrateSchema, validateDraft, nodeAtPath, getPath, hasPath, setPath, deletePath } from '../../lib/client.js';

@@ -1,0 +1,1 @@
+Public React/slot declaration baseline: DeepSeek Harness 0.2.2-alpha.2 (BSD-3-Clause). Local module references, the Cordis boundary and internal parser types are adapted for dsh-loader. Runtime selection remains in the patch adapters. These files must be reviewed when a new patch adapter is added.

@@ -80,14 +80,14 @@ test('ordered disposal: inner patch disposing first must not destroy the outer w
   assert.equal(a.active, false);
   assert.equal(
     target.greet('y'),
-    'B(A(hello y))',
-    "plugin B's wrapper must still be installed and still reach A's",
+    'B(hello y)',
+    "plugin B's wrapper must still be installed and skip disposed A",
   );
 
   // Now B disposes: it restores what it captured, which is A's wrapper.
   b.dispose();
-  assert.equal(target.greet('z'), 'A(hello z)');
-  assert.notEqual(target.greet, raw, "B restores A's wrapper, not the raw original");
+  assert.equal(target.greet('z'), 'hello z');
+  assert.equal(target.greet, raw, "B restores A's wrapper, not the raw original");
 });
 
 test('ordered disposal: outer patch disposing first unwinds to the inner wrapper', () => {

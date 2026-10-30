@@ -1,3 +1,9 @@
+export * from './ui/client-compat.js';
+import { createConfigClient } from './config-client.js';
+import { installConfigUI } from './ui/config-form.js';
+export { createConfigClient } from './config-client.js';
+export type { ConfigClient } from './config-client.js';
+export type { ConfigTemplate, ConfigField, ConfigValues, ConfigView } from './config.js';
 /**
  * dshloader BROWSER BUNDLE ENTRY.
  *
@@ -26,6 +32,7 @@ import { ensureDshModulesGlobal, installClient } from './client.js';
 import { installConversationEventsCompat } from './client-conversation-compat.js';
 import { installConnectionApiCompat } from './client-connection-api-compat.js';
 import { createUi, type DshLoaderUi } from './ui/index.js';
+import { ResourceScope } from './lifecycle.js';
 
 // Re-export the whole UI surface so a consumer's
 // `import { Button, Switch, Field } from '@dsh-plugin/dsh-loader/client'`
@@ -115,6 +122,9 @@ interface ClientContextLike {
 export function apply(ctx: ClientContextLike): void {
   const win = ambientWindow();
   if (win === undefined) return;
+  const resources = new ResourceScope();
+  ctx.effect?.(() => resources.dispose);
+  try {
 
   ensureDshModulesGlobal(win as never, ctx);
 
@@ -123,26 +133,39 @@ export function apply(ctx: ClientContextLike): void {
     clientCtx: ctx as never,
     effect: typeof ctx.effect === 'function' ? (fn) => ctx.effect!(fn) : undefined,
   });
+  if (api) resources.add(api.dispose);
+
+  if (api) {
+    const client = createConfigClient(window.fetch.bind(window), url => new EventSource(url), `${api.boot.bridgePrefix}/config`);
+    Object.assign(api, { config: client });
+    resources.add(() => client.dispose());
+    const mount = (scope: ClientContextLike) => {
+      if (resources.disposed) return;
+      const off = resources.add(installConfigUI(scope, client, api.boot));
+      scope.effect?.(() => off);
+    };
+    if (ctx.inject) ctx.inject(['slots'], mount); else mount(ctx);
+  }
 
   // Bridge the removed `conversationEvents` service name onto 0.1.2's
   // `uiConversation.events` registry so consumers injecting the legacy name
   // activate unchanged on every dsh line.
   installConversationEventsCompat(ctx);
 
-  ui = createUi();
-  if (api !== undefined) (api as Record<string, unknown>).ui = ui;
-  else if (win.__dshLoader__ !== undefined) win.__dshLoader__.ui = ui;
+  const currentUi = createUi();
+  ui = currentUi;
+  resources.add(() => {
+    currentUi.destroy();
+    if (ui === currentUi) ui = undefined;
+  });
+  if (api !== undefined) (api as Record<string, unknown>).ui = currentUi;
+  else if (win.__dshLoader__ !== undefined) win.__dshLoader__.ui = currentUi;
 
   // Ordered access for consumers that inject the service. Publication waits
   // for the connection.api bridge: consumers gated on dshLoaderUi read
   // `connection.api` during their own apply, so the legacy RPC proxy must be
   // in place before the service appears (a synchronous no-op on hosts that
   // already carry `connection.api`).
-  installConnectionApiCompat(ctx, () => ctx.provide?.(UI_SERVICE, ui));
-
-  // Tear the observer down with the fiber when the host provides `effect`.
-  ctx.effect?.(() => () => {
-    ui?.destroy();
-    ui = undefined;
-  });
+  installConnectionApiCompat(ctx, () => { if (!resources.disposed) ctx.provide?.(UI_SERVICE, currentUi); });
+  } catch (error) { resources.dispose(); throw error; }
 }

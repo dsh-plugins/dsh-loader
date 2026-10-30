@@ -18,7 +18,7 @@ test('TC-CLI-MOD-01 deep source path resolves to public entry', () => {
   const factory = moduleRegistry.get('@deepseek-ai/dsh-client-runtime/src/client/sessions/context-provenance.ts');
   assert.ok(typeof factory === 'function');
   const mod = factory((spec) => ({ contextProvenance: 'resolved:' + spec }));
-  assert.equal(mod.contextProvenance, 'resolved:@deepseek-ai/dsh-client-runtime/client');
+  assert.equal(mod.contextProvenance, 'resolved:@dsh-plugin/dsh-loader/client');
 });
 
 // TC-CLI-MOD-02: stable module name resolves via window.__dshLoader__.require.
@@ -27,7 +27,7 @@ test('TC-CLI-MOD-02 stable module name resolves through __dshLoader__.require', 
   const requireImpl = (spec) => ({ contextProvenance: 'impl:' + spec });
   installClient({ window, requireImpl });
   const mod = window.__dshLoader__.require('dsh/runtime/context-provenance');
-  assert.equal(mod.contextProvenance, 'impl:@deepseek-ai/dsh-client-runtime/client');
+  assert.equal(mod.contextProvenance, 'impl:@dsh-plugin/dsh-loader/client');
 });
 
 // TC-BND-CLI-01: no document â†?module aliases still register, no throw.
@@ -98,6 +98,7 @@ test('TC-PKG-02 installClient wraps __ModuleLoader__ require with packageAliases
   moduleTable.set('@deepseek-ai/dsh-client-runtime/client', { contextProvenance: 'ok' });
   window.__ModuleLoader__ = {
     load(handoff) {
+      if (!handoff.id.startsWith('test-plugin')) return;
       // The factory is called with a require that reads moduleTable.
       const factory = handoff.factory;
       const result = factory((spec) => {
@@ -142,6 +143,7 @@ test('TC-PKG-03 unmapped package names pass through unchanged', () => {
   moduleTable.set('@deepseek-ai/dsh-client-runtime/client', { contextProvenance: 'ok' });
   window.__ModuleLoader__ = {
     load(handoff) {
+      if (!handoff.id.startsWith('test-plugin')) return;
       const result = handoff.factory((spec) => {
         requires.push(spec);
         return moduleTable.get(spec);
@@ -173,6 +175,7 @@ test('TC-PKG-04 stable @dsh-plugin/dsh-loader/* names map to real dsh packages',
   moduleTable.set('@deepseek-ai/dsh-client-runtime/client', { contextProvenance: 'ok' });
   window.__ModuleLoader__ = {
     load(handoff) {
+      if (!handoff.id.startsWith('test-plugin')) return;
       const result = handoff.factory((spec) => {
         requires.push(spec);
         return moduleTable.get(spec);

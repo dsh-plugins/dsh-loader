@@ -1,2 +1,12 @@
-// Stable re-export: @dsh-plugin/dsh-loader/agent
-export * from '@deepseek-ai/dsh-agent';
+import { resolveStableModule } from '../../dist/adapters/stable-host.js';
+const upstream = resolveStableModule('agent');
+export const AgentModel = upstream.AgentModel;
+export const AgentRegistry = upstream.AgentRegistry;
+export const agentCarrier = upstream.agentCarrier;
+export const agentEvents = upstream.agentEvents;
+export const assembleContextFor = upstream.assembleContextFor;
+export default upstream.default;
+export const emitAgentEvent = upstream.emitAgentEvent;
+export const foldConsumedWork = upstream.foldConsumedWork;
+export const installModelSelection = upstream.installModelSelection;
+export const modelSelectionProjectionDefinition = upstream.modelSelectionProjectionDefinition;

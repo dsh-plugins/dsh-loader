@@ -1,5 +1,33 @@
-// Stable re-export: @dsh-plugin/dsh-loader/tools
-//
-// Host-side tools API. Plugins import from this subpath instead of
-// directly from @deepseek-ai/dsh-tools.
-export * from '@deepseek-ai/dsh-tools';
+import { resolveStableModule } from '../../dist/adapters/stable-host.js';
+const upstream = resolveStableModule('tools');
+export const CodeRunFailedError = upstream.CodeRunFailedError;
+export const JsonSchemaError = upstream.JsonSchemaError;
+export const RUN_CODE_NAME = upstream.RUN_CODE_NAME;
+export const TOOL_ABORTED = upstream.TOOL_ABORTED;
+export const TOOL_ABORTED_BEFORE_DISPATCH = upstream.TOOL_ABORTED_BEFORE_DISPATCH;
+export const TOOL_RUNTIME_SCHEDULER = upstream.TOOL_RUNTIME_SCHEDULER;
+export const ToolActivationError = upstream.ToolActivationError;
+export const ToolArgsError = upstream.ToolArgsError;
+export const ToolBatchExecutionError = upstream.ToolBatchExecutionError;
+export const ToolExecutorUnavailableError = upstream.ToolExecutorUnavailableError;
+export const ToolNotFoundError = upstream.ToolNotFoundError;
+export const ToolOutputError = upstream.ToolOutputError;
+export const ToolRuntime = upstream.ToolRuntime;
+export const ToolsService = upstream.ToolsService;
+export const assertObjectJsonSchema = upstream.assertObjectJsonSchema;
+export const assertSupportedJsonSchema = upstream.assertSupportedJsonSchema;
+export default upstream.default;
+export const defineContentToolFixture = upstream.defineContentToolFixture;
+export const defineTool = upstream.defineTool;
+export const isJsonSchemaRecord = upstream.isJsonSchemaRecord;
+export const isPlainJsonArray = upstream.isPlainJsonArray;
+export const isPlainJsonRecord = upstream.isPlainJsonRecord;
+export const jsonSchemaToPy = upstream.jsonSchemaToPy;
+export const jsonSchemaToTs = upstream.jsonSchemaToTs;
+export const parameterSchemaSpecToJsonSchema = upstream.parameterSchemaSpecToJsonSchema;
+export const projectToolSchema = upstream.projectToolSchema;
+export const renderToolsSdk = upstream.renderToolsSdk;
+export const renderToolsSdkPy = upstream.renderToolsSdkPy;
+export const validateArgs = upstream.validateArgs;
+export const validateJsonSchemaValue = upstream.validateJsonSchemaValue;
+export const valueSchemaSpecToJsonSchema = upstream.valueSchemaSpecToJsonSchema;

@@ -1,0 +1,9 @@
+{
+  "name": "@dsh-plugin/config-example",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "main": "index.mjs",
+  "peerDependencies": { "@dsh-plugin/dsh-loader": "^2.0.0" },
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } }
+}

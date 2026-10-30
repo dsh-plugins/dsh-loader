@@ -1,5 +1,11 @@
-﻿// Stable re-export: @dsh-plugin/dsh-loader/credentials
-//
-// Credential references (credentialRef).
-// When dsh renames the package, only this file changes.
-export * from '@deepseek-ai/dsh-credentials';
+import { resolveStableModule } from '../../dist/adapters/stable-host.js';
+const upstream = resolveStableModule('credentials');
+export const CredentialProvider = upstream.CredentialProvider;
+export const credentialKey = upstream.credentialKey;
+export const credentialKeyId = upstream.credentialKeyId;
+export const credentialKeyScope = upstream.credentialKeyScope;
+export const credentialRef = upstream.credentialRef;
+export default upstream.default;
+export const isCredentialKeySegment = upstream.isCredentialKeySegment;
+export const isCredentialRefName = upstream.isCredentialRefName;
+export const parseCredentialKey = upstream.parseCredentialKey;

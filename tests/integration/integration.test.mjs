@@ -81,12 +81,15 @@ test('dump-config surfaces spawn error when dsh CLI cannot start', () => {
   const prof = makeProfile('web');
   const origHome = process.env.DSH_HOME;
   process.env.DSH_HOME = prof.home;
+  const originalPath = process.env.PATH;
+  process.env.PATH = '';
   try {
     const { ok, output } = dumpConfig('web');
     if (ok) return; // dsh really installed on this machine — nothing to assert
     assert.ok(output.length > 0, 'failed dump-config must not print empty output');
     assert.match(output, /spawn error|not recognized|not found|ENOENT/i);
   } finally {
+    process.env.PATH = originalPath;
     process.env.DSH_HOME = origHome;
     prof.cleanup();
   }
@@ -146,25 +149,7 @@ test('TC-E2E-01 adding adapter for new dsh version restores plugin', async () =>
   // Step 1: only the dsh-1-x adapter is registered. select('3.0.0') falls back.
   const reg = new AdapterRegistry();
   reg.register({ supports: '>=1.0.0 <2.0.0', name: 'dsh-1-x', create: () => ({ apply() {} }) });
-  const warns = [];
-  const origWarn = console.warn;
-  console.warn = (m) => warns.push(m);
-  let step1;
-  try {
-    step1 = reg.select('3.0.0');
-  } finally {
-    console.warn = origWarn;
-  }
-  assert.equal(step1.mode, 'fallback');
-  assert.ok(warns.some((w) => /falling back/.test(w)));
-
-  // The plugin uses the stable API (old signature) via the 1.x adapter; dsh
-  // 3.0.0 rejects it �?plugin-level failure (SettingsResult ok:false).
-  const ctx1 = makeMockCtx();
-  ctx1.registerService('settings', settings3);
-  const api1 = createHostAPI({ ctx: ctx1.ctx, dshVersion: '3.0.0', factory: step1.factory, adapter: step1.factory.create(ctx1.ctx, {}), exposeAllNamespaces: true });
-  const result1 = await api1.settings.update('my-plugin', { enabled: true }, 0);
-  assert.equal(result1.ok, false, 'step 1 plugin call fails');
+  assert.throws(() => reg.select('3.0.0'), /no adapter covers/);
 
   // Step 3: ship a dsh-3-0-x adapter that translates the signature.
   reg.register({

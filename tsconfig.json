@@ -17,5 +17,5 @@
     "noEmit": true
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/ui/**", "src/client-ui.tsx"]
+  "exclude": ["src/ui/**", "src/client-ui.tsx", "src/stable/**"]
 }

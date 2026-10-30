@@ -1,5 +1,30 @@
-﻿// Stable re-export: @dsh-plugin/dsh-loader/subagent
-//
-// Subagent helpers (delegationDepthOf).
-// When dsh renames the package, only this file changes.
-export * from '@deepseek-ai/dsh-subagent';
+import { resolveStableModule } from '../../dist/adapters/stable-host.js';
+const upstream = resolveStableModule('subagent');
+export const AssistantOutputFold = upstream.AssistantOutputFold;
+export const NO_START_CAPABILITIES = upstream.NO_START_CAPABILITIES;
+export const STRUCTURED_OUTPUT_TOOL = upstream.STRUCTURED_OUTPUT_TOOL;
+export const SUBAGENT_DESCRIPTOR_VERSION = upstream.SUBAGENT_DESCRIPTOR_VERSION;
+export const SubagentDepthError = upstream.SubagentDepthError;
+export const SubagentError = upstream.SubagentError;
+export const SubagentRunId = upstream.SubagentRunId;
+export const SubagentRuntime = upstream.SubagentRuntime;
+export const appendDelegatedPolicyOverrides = upstream.appendDelegatedPolicyOverrides;
+export const applyChildComposition = upstream.applyChildComposition;
+export const assertPositiveFinite = upstream.assertPositiveFinite;
+export const assertSubagentMaxDepth = upstream.assertSubagentMaxDepth;
+export const assertUsableCwd = upstream.assertUsableCwd;
+export const captureDelegatedPolicyOverrides = upstream.captureDelegatedPolicyOverrides;
+export const childSessionMeta = upstream.childSessionMeta;
+export default upstream.default;
+export const delegationDepthOf = upstream.delegationDepthOf;
+export const finalAssistantOutput = upstream.finalAssistantOutput;
+export const foldSubagentDescriptor = upstream.foldSubagentDescriptor;
+export const parentAgentOptionsForDelegation = upstream.parentAgentOptionsForDelegation;
+export const resolveChildAgentOptions = upstream.resolveChildAgentOptions;
+export const resolveChildCwd = upstream.resolveChildCwd;
+export const resolveChildDepth = upstream.resolveChildDepth;
+export const settleRun = upstream.settleRun;
+export const settleRunResult = upstream.settleRunResult;
+export const snapshotSubagentDescriptor = upstream.snapshotSubagentDescriptor;
+export const subprocessRunHandle = upstream.subprocessRunHandle;
+export const validateConfiguredCwd = upstream.validateConfiguredCwd;

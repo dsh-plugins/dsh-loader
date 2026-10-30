@@ -1,0 +1,37 @@
+import { type ReactNode } from 'react';
+/** Shared 24px process row: tertiary text and icons, secondary on hover. */
+export interface DisclosureRowProps {
+    icon: ReactNode;
+    title: string;
+    open: boolean;
+    expandable: boolean;
+    onToggle: () => void;
+    /** Animate the complete header while its owning operation is running. */
+    running?: boolean | undefined;
+    /** Makes the title row the disclosure target; with an accessory, it shrinks to its content width. */
+    expandOnRowClick?: boolean | undefined;
+    /** Replaces the collapsed icon with a chevron while the row is hovered. */
+    previewChevron?: boolean | undefined;
+    /** Keeps `collapsedContent` inline while open. */
+    keepContentWhenOpen?: boolean | undefined;
+    collapsedContent?: ReactNode;
+    /** Independent action beside the title, outside the disclosure target and shimmer. */
+    headerAccessory?: ReactNode;
+    children?: ReactNode;
+    className?: string | undefined;
+    rowClassName?: string | undefined;
+    /** Sizing class for the header text area, beside the leading icon. */
+    contentClassName?: string | undefined;
+    /** Layout class shared by the header text and its decorative copy. */
+    contentLayoutClassName?: string | undefined;
+    leadingClassName?: string | undefined;
+    chevronClassName?: string | undefined;
+    titleClassName?: string | undefined;
+}
+/**
+ * Render one disclosure header and its controlled expanded content.
+ * Shallow prop comparison requires stable callbacks and React nodes to skip unchanged renders.
+ * @param props - Visual content, controlled state, and interaction policy.
+ * @returns the disclosure row.
+ */
+export declare const DisclosureRow: import("react").MemoExoticComponent<({ icon, title, open, expandable, onToggle, running, expandOnRowClick, previewChevron, keepContentWhenOpen, collapsedContent, headerAccessory, children, className, rowClassName, contentClassName, contentLayoutClassName, leadingClassName, chevronClassName, titleClassName, }: DisclosureRowProps) => import("react").JSX.Element>;

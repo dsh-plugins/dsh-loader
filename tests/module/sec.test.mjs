@@ -9,7 +9,7 @@ test('TC-SEC-03 exposeAllNamespaces true logs security warning', async () => {
   const { webServer } = makeMockWebServer();
   const { ctx, registerService } = makeMockCtx();
   registerService('webServer', webServer);
-  process.env.DSHLOADER_DSH_VERSION = '1.2.3';
+  process.env.DSHLOADER_DSH_VERSION = '0.1.5-rc.3';
   process.env.DSHLOADER_EXPOSE_ALL_SETTINGS = '1';
   const warns = [];
   const origWarn = console.warn;
@@ -29,7 +29,7 @@ test('TC-SEC-03 default does not print security warning', async () => {
   const { webServer } = makeMockWebServer();
   const { ctx, registerService } = makeMockCtx();
   registerService('webServer', webServer);
-  process.env.DSHLOADER_DSH_VERSION = '1.2.3';
+  process.env.DSHLOADER_DSH_VERSION = '0.1.5-rc.3';
   delete process.env.DSHLOADER_EXPOSE_ALL_SETTINGS;
   const warns = [];
   const origWarn = console.warn;

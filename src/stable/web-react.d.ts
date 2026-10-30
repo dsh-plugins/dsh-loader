@@ -1,1 +1,1 @@
-export * from '@deepseek-ai/dsh-client-web-react';
+export { bindSnapshotSelector, useInvoke } from '../../lib/types/ui/client-compat.js';

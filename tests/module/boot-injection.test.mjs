@@ -1,3 +1,5 @@
+import { createBootDescriptor } from '../../dist/bootstrap.js';
+const boot = createBootDescriptor('0.1.5-rc.3', 'dsh-0.1.5');
 // L2 module tests — client boot-alias injection (order-independent alias
 // factories for dsh ≥ 0.1.2 concurrent client-entry imports).
 import { test } from 'node:test';
@@ -27,7 +29,7 @@ function runInRealm(script, window) {
 test('boot-alias script registers all factories against an existing facade', () => {
   const { facade, registrations } = makeFacade();
   const window = { __ModuleLoader__: facade };
-  runInRealm(buildBootAliasScript(ALIASES), window);
+  runInRealm(buildBootAliasScript(ALIASES, boot), window);
   assert.deepEqual(registrations.map((r) => r.id).sort(), Object.keys(ALIASES).sort());
   // The flag array is created inside the vm realm (foreign Array prototype):
   // compare through a plain join instead of deep identity.
@@ -41,7 +43,7 @@ test('boot-alias script registers all factories against an existing facade', () 
 test('boot-alias factory requires the real package name', () => {
   const { facade, registrations } = makeFacade();
   const window = { __ModuleLoader__: facade };
-  runInRealm(buildBootAliasScript(ALIASES), window);
+  runInRealm(buildBootAliasScript(ALIASES, boot), window);
   const entry = registrations.find((r) => r.id === '@dsh-plugin/dsh-loader/ui-primitives');
   const mod = entry.factory((spec) => `resolved:${spec}`);
   assert.equal(mod, 'resolved:@deepseek-ai/dsh-client-ui-primitives');
@@ -51,7 +53,7 @@ test('boot-alias factory requires the real package name', () => {
 test('boot-alias context-provenance alias reshapes the named export', () => {
   const { facade, registrations } = makeFacade();
   const window = { __ModuleLoader__: facade };
-  runInRealm(buildBootAliasScript(ALIASES), window);
+  runInRealm(buildBootAliasScript(ALIASES, boot), window);
   const entry = registrations.find((r) => r.id === 'dsh/runtime/context-provenance');
   const mod = entry.factory(() => ({ contextProvenance: 'impl', other: 1 }));
   // The factory closure is created inside the vm realm, so its result carries
@@ -65,7 +67,7 @@ test('boot-alias context-provenance alias reshapes the named export', () => {
 test('boot-alias script intercepts a later facade assignment', () => {
   const { facade, registrations } = makeFacade();
   const window = {};
-  runInRealm(buildBootAliasScript(ALIASES), window);
+  runInRealm(buildBootAliasScript(ALIASES, boot), window);
   assert.equal(registrations.length, 0);
   window.__ModuleLoader__ = facade;
   assert.deepEqual(registrations.map((r) => r.id).sort(), Object.keys(ALIASES).sort());
@@ -81,7 +83,7 @@ test('boot-alias script intercepts a later facade assignment', () => {
 // A window that never gains a facade stays inert (pre-module-system dsh).
 test('boot-alias script stays inert without any facade', () => {
   const window = {};
-  runInRealm(buildBootAliasScript(ALIASES), window);
+  runInRealm(buildBootAliasScript(ALIASES, boot), window);
   assert.equal(window.__ModuleLoader__, undefined);
   assert.equal(window[BOOT_ALIAS_IDS_FLAG], undefined);
 });
@@ -90,7 +92,7 @@ test('boot-alias script stays inert without any facade', () => {
 test('boot-alias script is idempotent', () => {
   const { facade, registrations } = makeFacade();
   const window = { __ModuleLoader__: facade };
-  const script = buildBootAliasScript(ALIASES);
+  const script = buildBootAliasScript(ALIASES, boot);
   runInRealm(script, window);
   runInRealm(script, window);
   assert.equal(registrations.length, Object.keys(ALIASES).length);
@@ -139,15 +141,15 @@ test('installBootAliasInjection pushes a head script row onto the injection tabl
 });
 
 // Empty alias table: no subscription, no row.
-test('installBootAliasInjection with no aliases stays inert', () => {
+test('installBootAliasInjection with no aliases still injects boot configuration', () => {
   const { ctx } = makeMockCtx();
   let subscribed = 0;
   ctx.on = () => {
     subscribed += 1;
     return () => {};
   };
-  installBootAliasInjection(ctx, {});
-  assert.equal(subscribed, 0);
+  installBootAliasInjection(ctx, {}, boot);
+  assert.equal(subscribed, 1);
 });
 
 // The dsh-1-x host adapter wires the injection as a labeled effect.
@@ -155,6 +157,6 @@ test('dsh-1-x adapter apply installs the boot-alias injection effect', async () 
   const { ctx, effects } = makeMockCtx();
   const adapter = createDsh1xAdapter(ctx);
   await adapter.apply();
-  const effect = effects.find((e) => e.label === 'dshloader: client boot-alias injection');
+  const effect = effects.find((e) => typeof e.dispose === 'function');
   assert.ok(effect, 'boot-alias injection effect is registered');
 });

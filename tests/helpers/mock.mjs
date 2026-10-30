@@ -1,3 +1,7 @@
+import { afterEach } from 'node:test';
+import { createBootDescriptor } from '../../dist/bootstrap.js';
+const contexts = [];
+afterEach(() => { for (const ctx of contexts.splice(0)) for (const effect of [...ctx].reverse()) effect.dispose?.(); });
 // Shared test helpers (test-plan.md §3.3.2 / §3.3.3).
 //
 // The mock cordis context MUST keep `ctx.get(name)` and direct property access
@@ -16,6 +20,7 @@ import { tmpdir } from 'node:os';
 export function makeMockCtx(opts = {}) {
   const services = opts.services ?? new Map();
   const effects = [];
+  contexts.push(effects);
   const listeners = [];
 
   const ctx = {
@@ -135,6 +140,7 @@ export function makeMockWebServer() {
 export function makeMockWindow({ fetchImpl } = {}) {
   const moduleRegistry = new Map();
   const window = {
+    __DSHLOADER_BOOT__: createBootDescriptor('0.1.5-rc.3', 'dsh-0.1.5'),
     __ModuleLoader__: {
       registry: moduleRegistry,
       load(entry) {

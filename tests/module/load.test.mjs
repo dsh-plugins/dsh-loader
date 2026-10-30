@@ -9,7 +9,7 @@ test('TC-LOAD-01 apply registers ctx.dshLoader and logs adapter info', async () 
   const { webServer } = makeMockWebServer();
   const { ctx, registerService } = makeMockCtx();
   registerService('webServer', webServer);
-  process.env.DSHLOADER_DSH_VERSION = '1.2.3';
+  process.env.DSHLOADER_DSH_VERSION = '0.1.5-rc.3';
   const logs = [];
   const orig = console.log;
   console.log = (m) => logs.push(m);
@@ -20,8 +20,8 @@ test('TC-LOAD-01 apply registers ctx.dshLoader and logs adapter info', async () 
     delete process.env.DSHLOADER_DSH_VERSION;
   }
   assert.ok(ctx.get('dshLoader'), 'ctx.dshLoader registered');
-  assert.equal(ctx.dshLoader.dshVersion, '1.2.3');
-  assert.ok(logs.some((l) => /loaded adapter dsh-1-x for dsh 1\.2\.3/.test(l)));
+  assert.equal(ctx.dshLoader.dshVersion, '0.1.5-rc.3');
+  assert.ok(logs.some((l) => /loaded adapter dsh-0.1.5 for dsh 0\.1\.5-rc\.3/.test(l)));
   assert.ok(logs.some((l) => /registered stable API: settings, web, services/.test(l)));
 });
 
@@ -48,7 +48,7 @@ test('TC-LOAD-02 reactive consumer resolves alias regardless of order', async ()
   downstream.tryApply();
   assert.equal(downstream.state, 'PENDING');
   // 2. dshloader apply (after downstream) registers the alias.
-  process.env.DSHLOADER_DSH_VERSION = '1.2.3';
+  process.env.DSHLOADER_DSH_VERSION = '0.1.5-rc.3';
   try {
     await apply(ctx);
   } finally {
@@ -66,7 +66,7 @@ test('TC-LOAD-03 ctx.dshLoader and alias registered (position-independent)', asy
     const { webServer } = makeMockWebServer();
     const { ctx, registerService } = makeMockCtx();
     registerService('webServer', webServer);
-    process.env.DSHLOADER_DSH_VERSION = '1.2.3';
+    process.env.DSHLOADER_DSH_VERSION = '0.1.5-rc.3';
     try {
       await apply(ctx);
     } finally {
@@ -82,7 +82,7 @@ test('TC-OBS-01 startup log includes version, adapter, API list', async () => {
   const { webServer } = makeMockWebServer();
   const { ctx, registerService } = makeMockCtx();
   registerService('webServer', webServer);
-  process.env.DSHLOADER_DSH_VERSION = '1.2.3';
+  process.env.DSHLOADER_DSH_VERSION = '0.1.5-rc.3';
   const logs = [];
   const orig = console.log;
   console.log = (m) => logs.push(m);
@@ -93,8 +93,8 @@ test('TC-OBS-01 startup log includes version, adapter, API list', async () => {
     delete process.env.DSHLOADER_DSH_VERSION;
   }
   const joined = logs.join('\n');
-  assert.match(joined, /1\.2\.3/);
-  assert.match(joined, /dsh-1-x/);
+  assert.match(joined, /0\.1\.5-rc\.3/);
+  assert.match(joined, /dsh-0.1.5/);
   assert.match(joined, /settings, web, services/);
 });
 
@@ -139,7 +139,7 @@ test('TC-BND-CON-02 fiber unload+reload recycles effects without duplicates', as
   const { webServer, registrations } = makeMockWebServer();
   const { ctx, effects, registerService } = makeMockCtx();
   registerService('webServer', webServer);
-  process.env.DSHLOADER_DSH_VERSION = '1.2.3';
+  process.env.DSHLOADER_DSH_VERSION = '0.1.5-rc.3';
   try {
     await apply(ctx);
   } finally {
@@ -151,7 +151,7 @@ test('TC-BND-CON-02 fiber unload+reload recycles effects without duplicates', as
   for (const e of effects) e.dispose?.();
   // Simulate fiber reload: clear and re-apply.
   effects.length = 0;
-  process.env.DSHLOADER_DSH_VERSION = '1.2.3';
+  process.env.DSHLOADER_DSH_VERSION = '0.1.5-rc.3';
   try {
     await apply(ctx);
   } finally {

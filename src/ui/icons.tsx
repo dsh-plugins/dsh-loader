@@ -71,7 +71,7 @@ import Unlock from '@icon-park/react/es/icons/Unlock';
 import Up from '@icon-park/react/es/icons/Up';
 import Upload from '@icon-park/react/es/icons/Upload';
 import Write from '@icon-park/react/es/icons/Write';
-import { IconProvider, DEFAULT_ICON_CONFIGS, type IIconProps, type Theme } from '@icon-park/react/es/runtime';
+import { IconProvider, DEFAULT_ICON_CONFIGS, type IIconProps, type Theme } from '@icon-park/react/es/runtime/index.js';
 import { G } from './style.js';
 
 /** Props every dshloader icon accepts (IconPark's own prop contract). */

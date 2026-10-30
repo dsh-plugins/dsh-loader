@@ -20,3 +20,8 @@ examples/dsh-better-sidebar-loader/
 
 # Logs
 *.log
+
+# Local verification artifacts
+.cache/
+# The upstream compatibility fixture intentionally freezes all dependencies.
+!tests/fixtures/upstream/package-lock.json

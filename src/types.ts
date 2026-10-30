@@ -52,10 +52,16 @@ export interface HostAdapter {
   services?: any;
   /** Optional override for the registry facade (it names private dsh shapes). */
   registry?: any;
+  llm?: any;
+  dsh?: any;
+  modules?: import('./services/registry.js').RegistryModules;
+  authorizeConfig?: (request: import('node:http').IncomingMessage, response: import('node:http').ServerResponse) => boolean;
 }
 
 /** Config passed to an adapter's create(). */
 export interface HostAdapterConfig {
+  boot?: import('./bootstrap.js').BootDescriptor;
+  profileDir?: string;
   exposeAllNamespaces?: boolean;
   hostPackageAliases?: Record<string, string>;
   /** Extra client module-table aliases merged over the adapter's tables. */
@@ -65,7 +71,7 @@ export interface HostAdapterConfig {
 /** Result of AdapterRegistry.select(). */
 export interface AdapterSelection {
   factory: AdapterFactory;
-  mode: 'exact' | 'range' | 'fallback';
+  mode: 'exact' | 'range';
 }
 
 /** dshloader host API exposed as `ctx.dshLoader`. */
@@ -73,6 +79,7 @@ export interface HostAPI {
   version: string;
   dshVersion?: string;
   adapterVersion?: string;
+  config: import('./config.js').ConfigAPI;
   settings: SettingsAPI;
   web: WebAPI;
   services: ServicesAPI;
@@ -84,7 +91,7 @@ export interface HostAPI {
   llm: import('./services/llm.js').LlmAPI;
   /** Module-level dsh symbols (defineTool, deadline, BasicCompactionEngine, ...). */
   dsh: import('./services/dsh-symbols.js').DshSymbolsAPI;
-  registerPackageAlias(oldName: string, newName: string): void;
+  registerPackageAlias(oldName: string, newName: string, owner?: import('./lifecycle.js').ResourceOwner): Promise<() => void>;
 }
 
 /** Settings stable API. */

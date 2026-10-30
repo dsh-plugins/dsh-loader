@@ -16,8 +16,12 @@
 // The module exports an `installClient` function for testability and runs an
 // IIFE at the bottom for the real browser bundle.
 import { LOADER_VERSION, LOG_PREFIX, BOOT_ALIAS_IDS_FLAG } from './version.js';
-import { clientAdapters } from './adapters/index.js';
-import { BRIDGE_PREFIX } from './adapters/dsh-1-x.js';
+import { clientAdapters } from './adapters/client.js';
+import { AliasTable, ResourceScope, type ResourceOwner } from './lifecycle.js';
+import { patchSlot, type PatchHandle } from './patch.js';
+import { validateBoot, type BootDescriptor } from './bootstrap.js';
+import { installSettingsFetchInterceptor } from './adapters/client-settings-bridge.js';
+export { installSettingsFetchInterceptor } from './adapters/client-settings-bridge.js';
 
 /** Browser-only globals dshloader relies on (typed loosely so the module compiles without DOM lib). */
 type FetchImpl = (input: any, init?: any) => Promise<{ clone(): { json(): any }; json(): any }>;
@@ -29,6 +33,8 @@ interface DshLoaderWindowLike {
     load(handoff: { id: string; factory: (require: (spec: string) => any) => any }): unknown;
   };
   __DSHLOADER_VERSION__?: string;
+  __DSHLOADER_BOOT__?: BootDescriptor;
+  __DSHLOADER_ALIAS_MAP__?: Map<string, string>;
   __DSHLOADER_CONFIG__?: { exposeAllNamespaces?: boolean };
   __dshNativeRequire__?: (spec: string) => any;
   __dshLoader__?: unknown;
@@ -100,26 +106,12 @@ export class ModuleNotFoundError extends Error {
   }
 }
 
-interface ClientAdapter {
-  supports: string;
-  name: string;
-  moduleAliases?: Record<string, string>;
-  packageAliases?: Record<string, string>;
-}
-
-/**
- * Pick the client adapter for the given dsh version. v1 ships a single
- * client adapter (dsh 1.x); when more are added, swap this for a semver-based
- * selection mirroring the host AdapterRegistry.
- */
-function pickClientAdapter(dshVersion?: string): ClientAdapter {
-  return clientAdapters[0];
-}
-
 interface CreateClientAPIOpts {
   dshVersion?: string;
   adapterVersion?: string;
   moduleAliases?: Record<string, string>;
+  aliasTable?: AliasTable;
+  resources?: ResourceScope;
   packageAliases?: Map<string, string> | Record<string, string>;
   requireImpl?: (spec: string) => any;
   fetchBridge?: {
@@ -133,7 +125,9 @@ interface CreateClientAPIOpts {
  * Build the `window.__dshLoader__` API object.
  */
 export function createClientAPI(opts: CreateClientAPIOpts = {}) {
-  const aliases = new Map(Object.entries(opts.moduleAliases ?? {}));
+  const moduleTable = opts.aliasTable ?? new AliasTable();
+  if (!opts.aliasTable) moduleTable.register(opts.moduleAliases ?? {});
+  const aliases = moduleTable.values;
   const requireImpl = opts.requireImpl ?? ((spec: string) => {
     throw new ModuleNotFoundError(spec);
   });
@@ -141,9 +135,9 @@ export function createClientAPI(opts: CreateClientAPIOpts = {}) {
   // Reuse the Map from installClient when provided so registerPackageAlias
   // mutations are visible to the __ModuleLoader__ wrapper. Otherwise create
   // a fresh Map from a plain object.
-  const packageAliases = opts.packageAliases instanceof Map
-    ? opts.packageAliases
-    : new Map(Object.entries(opts.packageAliases ?? {}));
+  const packageTable = opts.aliasTable ?? new AliasTable();
+  if (!opts.aliasTable) packageTable.register(Object.fromEntries(opts.packageAliases instanceof Map
+    ? opts.packageAliases : Object.entries(opts.packageAliases ?? {})));
 
   const api = {
     version: LOADER_VERSION,
@@ -159,8 +153,11 @@ export function createClientAPI(opts: CreateClientAPIOpts = {}) {
       return requireImpl(target);
     },
 
-    registerModuleAlias(alias: string, target: string) {
-      aliases.set(alias, target);
+    registerModuleAlias(alias: string, target: string, owner?: ResourceOwner) {
+      const release = moduleTable.register({ [alias]: target });
+      const off = opts.resources?.add(release) ?? release;
+      owner?.effect(() => off);
+      return off;
     },
 
     /**
@@ -170,8 +167,11 @@ export function createClientAPI(opts: CreateClientAPIOpts = {}) {
      * hitting the module table. This lets dsh rename client packages
      * across versions without forcing plugin bundles to rebuild.
      */
-    registerPackageAlias(oldName: string, newName: string) {
-      packageAliases.set(oldName, newName);
+    registerPackageAlias(oldName: string, newName: string, owner?: ResourceOwner) {
+      const release = packageTable.register({ [oldName]: newName });
+      const off = opts.resources?.add(release) ?? release;
+      owner?.effect(() => off);
+      return off;
     },
 
     /**
@@ -207,6 +207,7 @@ export function createClientAPI(opts: CreateClientAPIOpts = {}) {
 }
 
 interface InstallClientOpts {
+  boot?: BootDescriptor;
   window?: DshLoaderWindowLike;
   dshVersion?: string;
   exposeAllNamespaces?: boolean;
@@ -223,253 +224,69 @@ interface InstallClientOpts {
   effect?: (fn: () => (() => void) | void) => unknown;
 }
 
-// Cross-realm registry keys (Symbol.for so a reloaded bundle instance shares
-// them): the load-wrapper state and the alias-factory ids we registered.
-const LOAD_WRAP_KEY = Symbol.for('@dsh-plugin/dsh-loader:load-wrap');
-const ALIAS_FACTORY_IDS_KEY = Symbol.for('@dsh-plugin/dsh-loader:alias-factories');
-
-type ModuleLoaderLoad = (handoff: { id: string; factory: (require: (spec: string) => any) => any }) => unknown;
-
-interface LoadWrapState {
-  original: ModuleLoaderLoad;
-  ours: ModuleLoaderLoad;
+const CLIENT_STATE_KEY = Symbol.for('dshloader.client.v2');
+interface ClientState {
+  aliases: AliasTable;
+  factories: Set<string>;
+  refs: number;
+  load?: PatchHandle;
+  fetch?: () => void;
+  apis: Set<ReturnType<typeof createClientAPI>>;
 }
-
-/**
- * Install dshloader into a browser-like environment.
- */
+/** The host selects the adapter; every install shares one alias table. */
 export function installClient(opts: InstallClientOpts = {}) {
   const win = opts.window ?? ambientWindow();
-  if (win === undefined) return undefined;
-
-  const dshVersion = opts.dshVersion ?? win.__DSHLOADER_VERSION__;
-  const adapter = pickClientAdapter(dshVersion);
-  const moduleAliases = { ...(adapter.moduleAliases ?? {}) };
-  // Merge adapter-declared package aliases with any passed via opts (opts
-  // win on conflict, so tests / runtime can override adapter defaults).
-  const packageAliases = new Map(Object.entries(adapter.packageAliases ?? {}));
-  if (opts.packageAliases) {
-    for (const [k, v] of Object.entries(opts.packageAliases)) packageAliases.set(k, v);
-  }
-
-  // fetch bridge (only meaningful when exposeAllNamespaces is on).
-  const exposeAllNamespaces = Boolean(
-    opts.exposeAllNamespaces ?? win.__DSHLOADER_CONFIG__?.exposeAllNamespaces,
-  );
-  const bridgePrefix = opts.hostBridgePrefix ?? BRIDGE_PREFIX;
-
-  const fetchBridge = exposeAllNamespaces
-    ? {
-        describe: () =>
-          win.fetch(`${bridgePrefix}/settings/describe`, { headers: { accept: 'application/json' } }).then((r) => r.json()),
-        write: (mode: string, payload: object) =>
-          win.fetch(`${bridgePrefix}/settings/${mode}`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(payload),
-          }).then((r) => r.json()),
-      }
-    : undefined;
-
-  const api = createClientAPI({
-    dshVersion,
-    adapterVersion: adapter.supports,
-    moduleAliases,
-    packageAliases,
-    requireImpl: opts.requireImpl ?? ((spec) => win.__dshNativeRequire__?.(spec)),
-    fetchBridge,
-    clientCtx: opts.clientCtx,
+  if (!win) return undefined;
+  const boot = validateBoot(opts.boot ?? win.__DSHLOADER_BOOT__);
+  const adapter = clientAdapters.find(entry => entry.id === boot.adapterId)!;
+  const holder = win as DshLoaderWindowLike & { [CLIENT_STATE_KEY]?: ClientState };
+  const state = holder[CLIENT_STATE_KEY] ??= { aliases: new AliasTable(), factories: new Set(win[BOOT_ALIAS_IDS_FLAG] ?? []), refs: 0, apis: new Set() };
+  const resources = new ResourceScope();
+  opts.effect?.(() => resources.dispose);
+  state.refs++;
+  resources.add(() => {
+    if (--state.refs === 0) { state.load?.dispose(); state.fetch?.(); state.fetch = undefined; }
   });
-  win.__dshLoader__ = api;
-
-  // Patch disposers — handed to the cordis effect hook when the caller
-  // provides one, so HMR / fiber unload reverts every patch below.
-  const disposers: Array<() => void> = [];
-
-  // Wrap __ModuleLoader__.load so every factory's require() function
-  // applies package-name aliases before hitting the module table. This
-  // must happen BEFORE registering module-alias factories below, because
-  // those factories also receive the wrapped require.
-  //
-  // Idempotent: a Symbol.for-registered wrap state survives bundle reloads,
-  // so a second installClient (HMR re-apply before the old fiber's disposer
-  // ran, or a duplicate bundle) reuses the existing wrapper instead of
-  // stacking another layer.
-  const loader = win.__ModuleLoader__;
-  if (loader && typeof loader.load === 'function') {
-    const holder = loader as typeof loader & { [LOAD_WRAP_KEY]?: LoadWrapState };
-    const existing = holder[LOAD_WRAP_KEY];
-    if (existing !== undefined && loader.load === existing.ours) {
-      // Already wrapped by a live dshloader instance — nothing to do.
-    } else {
-      const original = loader.load;
-      const wrapped = function dshloaderLoad(handoff: { id: string; factory: (require: (spec: string) => any) => any }) {
-        const wrappedFactory = (require: (spec: string) => any) => {
-          const aliasedRequire = (spec: string) => {
-            const mapped = packageAliases.get(spec);
-            return require(mapped ?? spec);
-          };
-          return handoff.factory(aliasedRequire);
-        };
-        return original.call(loader, { id: handoff.id, factory: wrappedFactory });
-      };
-      loader.load = wrapped;
-      holder[LOAD_WRAP_KEY] = { original, ours: wrapped };
-      disposers.push(() => {
-        if (loader.load === wrapped) loader.load = original;
-        if (holder[LOAD_WRAP_KEY]?.ours === wrapped) delete holder[LOAD_WRAP_KEY];
-      });
+  try {
+    resources.add(state.aliases.register({ ...adapter.moduleAliases, ...adapter.packageAliases, ...boot.aliases, ...opts.packageAliases }));
+    win.__DSHLOADER_ALIAS_MAP__ = state.aliases.values;
+    const loader = win.__ModuleLoader__;
+    if (!loader || typeof loader.load !== 'function') throw new Error('dshloader: module loader unavailable');
+    if (!state.load?.active) {
+      state.load = patchSlot<typeof loader.load>(loader, 'load', original => function(handoff) {
+        return original.call(loader, { ...handoff, factory: require => handoff.factory(spec => require(state.aliases.values.get(spec) ?? spec)) });
+      }, { id: 'dshloader:module-load' });
     }
-  }
-
-  // Register module-alias factories with the client module loader (fix 1).
-  // Skip ids the boot-alias injection already registered: the live module
-  // system throws on a duplicate factory id, and the injected factories are
-  // registered before any entry materializes regardless of activation order.
-  // Also skip ids a previous installClient run of THIS bundle registered
-  // (HMR re-apply), tracked on the window via Symbol.for.
-  const winRecord = win as DshLoaderWindowLike & { [ALIAS_FACTORY_IDS_KEY]?: string[] };
-  const registeredByUs = new Set(
-    Array.isArray(winRecord[ALIAS_FACTORY_IDS_KEY]) ? winRecord[ALIAS_FACTORY_IDS_KEY] : [],
-  );
-  const bootAliased = new Set(
-    Array.isArray(win[BOOT_ALIAS_IDS_FLAG]) ? win[BOOT_ALIAS_IDS_FLAG] : [],
-  );
-  if (loader && typeof loader.load === 'function') {
-    for (const [aliasId, target] of Object.entries(moduleAliases)) {
-      if (bootAliased.has(aliasId) || registeredByUs.has(aliasId)) continue;
-      loader.load({
-        id: aliasId,
-        factory: (require: (spec: string) => any) => {
-          const mod = require(target);
-          // Preserve the deep import's expected named export shape.
-          if (aliasId.endsWith('context-provenance.ts') || aliasId.endsWith('context-provenance')) {
-            return { contextProvenance: mod.contextProvenance };
-          }
-          return mod;
-        },
-      });
-      registeredByUs.add(aliasId);
-    }
-    winRecord[ALIAS_FACTORY_IDS_KEY] = [...registeredByUs];
-  }
-
-  if (exposeAllNamespaces) {
-    // The interceptor returns its disposer — keep it so fiber unload /
-    // HMR restores the native fetch instead of leaking the wrapper.
-    disposers.push(installSettingsFetchInterceptor(win, bridgePrefix));
-    console.warn(`${LOG_PREFIX} exposeAllNamespaces enabled: bypassing official settings whitelist`);
-  }
-
-  if (typeof opts.effect === 'function' && disposers.length > 0) {
-    opts.effect(() => () => {
-      for (const dispose of disposers.splice(0)) dispose();
+    const expose = boot.exposeAllNamespaces;
+    const bridgePrefix = boot.bridgePrefix;
+    const fetchBridge = expose ? {
+      describe: () => win.fetch(`${bridgePrefix}/settings/describe`, { headers: { accept: 'application/json' } }).then(r => r.json()),
+      write: (mode: string, payload: object) => win.fetch(`${bridgePrefix}/settings/${mode}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) }).then(r => r.json()),
+    } : undefined;
+    const api = createClientAPI({
+      dshVersion: boot.dshVersion, adapterVersion: adapter.patch, aliasTable: state.aliases, resources,
+      packageAliases: state.aliases.values, requireImpl: opts.requireImpl ?? (spec => win.__dshNativeRequire__?.(spec)),
+      fetchBridge, clientCtx: opts.clientCtx,
     });
-  }
-
-  return api;
-}
-
-/**
- * Fetch interceptor for settings namespace whitelist bypass (fix 5, path 2).
- * Mirrors dsh-upstream-fixes/lib/client.js (127-223).
- *
- * - /api/settings.describe: merge non-whitelisted namespaces from the host
- *   bridge into the official response (rpcId/official fields preserved).
- * - /api/settings.{update,mutate,replace}: route writes for namespaces the
- *   official proxy does NOT expose through the host bridge, and rebuild the
- *   response envelope as `{ type: 'server-response', rpcId, result }` so the
- *   official client can correlate the response with the request.
- */
-export function installSettingsFetchInterceptor(
-  win: DshLoaderWindowLike,
-  bridgePrefix = BRIDGE_PREFIX,
-): () => void {
-  if (typeof win.fetch !== 'function') return () => {};
-  const originalFetch = win.fetch;
-  /** Namespaces the official proxy itself exposed (learned from describe). */
-  const officialExposed = new Set<string>();
-
-  win.fetch = async function dshloaderFetch(this: unknown, input: any, init?: any) {
-    let pathname = '';
-    try {
-      const urlLike = typeof input === 'string' ? input : (input as { url?: string }).url;
-      pathname = new URL(urlLike as string, win.location?.origin ?? 'http://localhost').pathname;
-    } catch {
-      pathname = String(input).split('?')[0];
+    state.apis.add(api);
+    win.__dshLoader__ = api;
+    resources.add(() => {
+      state.apis.delete(api);
+      if (win.__dshLoader__ === api) win.__dshLoader__ = [...state.apis].at(-1);
+    });
+    for (const aliasId of state.aliases.values.keys()) {
+      if (state.factories.has(aliasId)) continue;
+      loader.load({ id: aliasId, factory: require => {
+        const target = state.aliases.values.get(aliasId);
+        if (!target) throw new ModuleNotFoundError(aliasId);
+        const mod = require(target);
+        return aliasId.endsWith('context-provenance.ts') || aliasId.endsWith('context-provenance') ? { contextProvenance: mod.contextProvenance } : mod;
+      } });
+      state.factories.add(aliasId);
     }
-    const method = (init?.method ?? 'GET').toUpperCase();
-
-    // describe: merge bridge namespaces into the official response.
-    if (pathname === '/api/settings.describe') {
-      const response = await originalFetch.call(this, input, init);
-      try {
-        const body = await response.clone().json();
-        const namespaces = body?.result?.value?.namespaces;
-        if (!Array.isArray(namespaces)) return response;
-        for (const row of namespaces) {
-          if (typeof row?.ns === 'string') officialExposed.add(row.ns);
-        }
-        const extra = await originalFetch.call(this, `${bridgePrefix}/settings/describe`, {
-          headers: { accept: 'application/json' },
-        });
-        const extraBody = await extra.json();
-        if (extraBody?.ok !== true || !Array.isArray(extraBody.namespaces)) return response;
-        const seen = new Set(namespaces.map((row: { ns: string }) => row.ns));
-        const merged = [...namespaces, ...extraBody.namespaces.filter((row: { ns: string }) => !seen.has(row.ns))];
-        const ResponseCtor = win.Response!;
-        return new ResponseCtor(
-          JSON.stringify({ ...body, result: { ...body.result, value: { ...body.result.value, namespaces: merged } } }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        );
-      } catch {
-        return response;
-      }
-    }
-
-    // writes: route non-whitelisted namespaces through the bridge, echo rpcId.
-    if (
-      (pathname === '/api/settings.update' || pathname === '/api/settings.mutate' || pathname === '/api/settings.replace') &&
-      method === 'POST'
-    ) {
-      let rpcId: unknown = null;
-      let payload: { ns?: string; [k: string]: unknown } | null = null;
-      try {
-        const parsed = JSON.parse(String(init?.body ?? '{}'));
-        rpcId = parsed.rpcId;
-        payload = parsed.payload;
-      } catch {
-        /* fall through to the original endpoint */
-      }
-      const ns = typeof payload?.ns === 'string' ? payload.ns : '';
-      if (rpcId !== null && ns !== '' && officialExposed.size > 0 && !officialExposed.has(ns)) {
-        try {
-          const mode = pathname.slice('/api/settings.'.length);
-          const res = await originalFetch.call(this, `${bridgePrefix}/settings/${mode}`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
-          const body = await res.json();
-          if (body?.result) {
-            const ResponseCtor = win.Response!;
-            return new ResponseCtor(
-              JSON.stringify({ type: 'server-response', rpcId, result: body.result }),
-              { status: 200, headers: { 'content-type': 'application/json' } },
-            );
-          }
-        } catch {
-          /* fall back to the original endpoint */
-        }
-      }
-    }
-
-    return originalFetch.call(this, input, init);
-  };
-
-  return () => {
-    win.fetch = originalFetch;
-  };
+    if (expose && !state.fetch) state.fetch = installSettingsFetchInterceptor(win, bridgePrefix);
+    return Object.assign(api, { boot, dispose: resources.dispose });
+  } catch (error) { resources.dispose(); throw error; }
 }
 
 // ── cordis client-plugin entry ─────────────────────────────────────────

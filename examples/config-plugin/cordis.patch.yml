@@ -1,0 +1,3 @@
+- insert:
+    - id: config-example
+      name: '@dsh-plugin/config-example'
