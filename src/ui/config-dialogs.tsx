@@ -43,6 +43,7 @@ const CSS = `
 .dshl-config-dialog{width:min(720px,calc(100vw - 32px));max-height:calc(100dvh - 32px);box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2,#8886);border-radius:12px;padding:20px;overflow:auto;font:inherit;background:var(--dsw-alias-bg-base,Canvas);color:var(--dsw-alias-label-primary,CanvasText);color-scheme:inherit}
 .dshl-config-dialog::backdrop{background:#0007}.dshl-config-dialog h2{font-size:1.1em;margin:0 0 16px}
 .dshl-config-dialog-body{min-width:0;overflow-wrap:anywhere}.dshl-config-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+.dshl-config-dialog-body textarea{max-width:100%;box-sizing:border-box;resize:vertical}
 .dshl-config-dialog-actions button{font:inherit;border:1px solid var(--dsw-alias-border-l2,#8888);border-radius:6px;padding:6px 16px;background:transparent;color:inherit;cursor:pointer}.dshl-config-dialog-actions button:disabled{opacity:.5;cursor:default}
 .dshl-config-dialog-error{color:var(--dsw-alias-status-danger,#d33);overflow-wrap:anywhere}
 @media(max-width:480px){.dshl-config-dialog{padding:12px}}

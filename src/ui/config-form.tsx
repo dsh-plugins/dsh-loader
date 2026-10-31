@@ -15,7 +15,7 @@ export const CONFIG_CSS = `
 .dshl-config-item{display:grid;grid-template-columns:var(--config-label-width) minmax(0,1fr);gap:12px;align-items:start;margin:12px 0}
 .dshl-config-label{padding-top:6px;white-space:nowrap}.dshl-config-label span{display:inline-block}
 .dshl-config-control{min-width:0}.dshl-config-control input:not([type=checkbox]),.dshl-config-control select,.dshl-config-control textarea{width:100%;box-sizing:border-box;font:inherit;color:inherit;background:transparent;border:1px solid var(--color-border,#8888);border-radius:6px;padding:6px}
-.dshl-config-control option{color:CanvasText;background:Canvas}.dshl-config-control textarea{min-height:80px}
+.dshl-config-control option{color:CanvasText;background:Canvas}.dshl-config-control textarea{min-height:80px;max-width:100%;resize:vertical}
 .dshl-config-group{border:1px solid var(--color-border,#8888);border-radius:10px;min-width:0;margin:16px 0;padding:0 12px}
 .dshl-config-group legend{padding:0 8px;margin-left:4px;font-weight:500;max-width:100%;overflow-wrap:anywhere}
 .dshl-config-group-body{display:grid;grid-template-rows:1fr}

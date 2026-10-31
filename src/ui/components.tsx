@@ -66,7 +66,7 @@ const CSS = `
   padding:0 ${G.padX}px;height:${G.controlHeight}px;
   transition:border-color .12s ease;
 }
-.${CX}-textarea{height:auto;min-height:72px;padding:7px ${G.padX}px;line-height:1.5;resize:vertical}
+.${CX}-textarea{height:auto;min-height:72px;max-width:100%;padding:7px ${G.padX}px;line-height:1.5;resize:vertical}
 .${CX}-input:focus,.${CX}-textarea:focus,.${CX}-select:focus{outline:none;border-color:${T.accent}}
 .${CX}-input:disabled,.${CX}-textarea:disabled,.${CX}-select:disabled{opacity:.55;cursor:not-allowed}
 .${CX}-input--mono,.${CX}-textarea--mono{font-family:${T.fontCode}}
