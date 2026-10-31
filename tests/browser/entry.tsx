@@ -16,3 +16,13 @@ const slots = {
 };
 installConfigUI({ get: () => slots }, client, boot);
 document.getElementById('theme')!.onclick = () => document.body.classList.toggle('dark');
+
+// Record actual browser transition events for phase-order verification.
+const motionLog=document.getElementById('group-motion-log')!;
+for(const type of ['transitionstart','transitionend','transitioncancel'])document.getElementById('root')!.addEventListener(type,event=>{
+  const motion=event as TransitionEvent, target=motion.target as HTMLElement;
+  if(!['border-top-color','grid-template-rows'].includes(motion.propertyName))return;
+  const group=target.closest('.dshl-config-group')!;
+  const data={type,time:Math.round(performance.now()),property:motion.propertyName,group:group.querySelector('legend')!.textContent,expanded:group.getAttribute('data-expanded'),height:Math.round(group.getBoundingClientRect().height),border:getComputedStyle(group).borderTopColor};
+  motionLog.textContent+=(JSON.stringify(data)+'\n');
+});

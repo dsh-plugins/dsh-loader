@@ -15,6 +15,10 @@ export interface ConfigField {
   fields?: ConfigField[];
   item?: ConfigField;
   visibleWhen?: { path: string[]; equals: ConfigValue };
+  /** Group/object presentation only; defaults to a fixed, expanded fieldset. */
+  collapsible?: boolean;
+  /** Initial UI state when collapsible=true; never stored as a config value. */
+  defaultCollapsed?: boolean;
 }
 export interface ConfigTemplate {
   id: string;
@@ -61,6 +65,9 @@ export function validateTemplate(template: ConfigTemplate): void {
     if (!Array.isArray(fields)) throw new ConfigError('invalid-template', 'fields must be an array');
     for (const field of fields) {
       if (!field || typeof field.label !== 'string' || !field.label || !['text','textarea','password','number','boolean','select','multiselect','object','array','group'].includes(field.type)) throw new ConfigError('invalid-template', 'Invalid field');
+      if ((field.collapsible !== undefined && typeof field.collapsible !== 'boolean') || (field.defaultCollapsed !== undefined && typeof field.defaultCollapsed !== 'boolean')) throw new ConfigError('invalid-template', 'Collapse options must be boolean');
+      if ((field.collapsible !== undefined || field.defaultCollapsed !== undefined) && !['group', 'object'].includes(field.type)) throw new ConfigError('invalid-template', 'Collapse options require a group or object');
+      if (field.defaultCollapsed && !field.collapsible) throw new ConfigError('invalid-template', 'defaultCollapsed requires collapsible=true');
       if (field.visibleWhen && (!Array.isArray(field.visibleWhen.path) || !field.visibleWhen.path.length || field.visibleWhen.path.some(key => typeof key !== 'string' || unsafe.has(key)) || field.visibleWhen.equals === undefined)) throw new ConfigError('invalid-template', 'Invalid visibility condition');
       if ((field.min !== undefined && !Number.isFinite(field.min)) || (field.max !== undefined && !Number.isFinite(field.max)) || (field.min !== undefined && field.max !== undefined && field.min > field.max)) throw new ConfigError('invalid-template', 'Invalid field bounds');
       if (field.type === 'group') { if (!field.fields) throw new ConfigError('invalid-template', 'Group needs fields'); walk(field.fields, keys); continue; }

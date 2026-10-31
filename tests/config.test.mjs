@@ -99,3 +99,26 @@ test('partial object and array defaults fill nested fields on first registration
   assert.deepEqual(handle.get().value, { object: { name: 'nested' }, rows: [{ name: 'nested' }] });
   assert.deepEqual(store.read('nested').defaults, handle.get().value);
 });
+
+
+test('collapsible group/object options stay in the template and never change persisted values', async t => {
+  const {store,context,root,handle}=await fixture(t);handle.dispose();
+  const next=await store.register(context,defineConfig({id:'folds',packageName:'@example/folds',title:'Folds',fields:[
+    {type:'group',label:'Layout',collapsible:true,defaultCollapsed:true,fields:[{type:'number',key:'count',label:'Count',default:3,min:1}]},
+    {type:'object',key:'nested',label:'Object',collapsible:true,fields:[{type:'text',key:'name',label:'Name',default:'saved'}]},
+  ]}));
+  assert.deepEqual(next.get().value,{count:3,nested:{name:'saved'}});
+  assert.equal(store.read('folds').template.fields[0].defaultCollapsed,true);
+  await assert.rejects(next.update({count:0}),error=>error.code==='validation');
+  await next.update({count:4});
+  const disk=JSON.parse(await readFile(join(root,'config/folds/config.json'),'utf8'));
+  assert.deepEqual(disk.value,{count:4,nested:{name:'saved'}});
+});
+
+test('invalid collapse metadata is rejected before registration',()=>{
+  const build=field=>defineConfig({id:'folds',packageName:'@example/folds',title:'Folds',fields:[field]});
+  for(const options of [{collapsible:'yes'},{defaultCollapsed:1},{defaultCollapsed:true}]){
+    assert.throws(()=>build({type:'group',label:'Group',fields:[],...options}),error=>error.code==='invalid-template');
+  }
+  assert.throws(()=>build({type:'text',key:'name',label:'Name',collapsible:true}),error=>error.code==='invalid-template');
+});

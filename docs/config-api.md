@@ -18,7 +18,7 @@ export async function apply(ctx: CordisContext & { dshLoader: HostAPI }) {
     description: '连接与运行参数',
     fields: [
       { type: 'boolean', key: 'enabled', label: '启用', default: true },
-      { type: 'group', label: '连接', fields: [
+      { type: 'group', label: '连接', collapsible: true, defaultCollapsed: false, fields: [
         { type: 'text', key: 'endpoint', label: '服务地址', default: 'https://example.com', required: true },
         { type: 'number', key: 'timeout', label: '请求超时时间（秒）', default: 30, min: 1, max: 120 },
       ] },
@@ -54,9 +54,20 @@ export async function apply(ctx: CordisContext & { dshLoader: HostAPI }) {
 | `number` | 有限数字；min/max 表示数值范围 |
 | `boolean` | 开关 |
 | `select` / `multiselect` | `options: [{ label, value: string或number }]`；多选存数组 |
-| `object` | `fields`；创建嵌套对象 |
+| `object` | `fields`；创建嵌套对象，可设置折叠属性 |
 | `array` | `item` 指定每项字段模板；支持嵌套对象/数组，min/max 表示项数 |
-| `group` | `fields`，无 key；只分组，不改变数据层级 |
+| `group` | `fields`，无 key；只分组，不改变数据层级，可设置折叠属性 |
+
+`group` 和 `object` 还支持以下布局属性：
+
+| 属性 | 默认值 | 行为 |
+| --- | --- | --- |
+| `collapsible` | `false` | 是否显示标题右侧的折叠三角，并允许点击或用 Enter/空格切换 |
+| `defaultCollapsed` | `false` | 首次渲染时是否折叠；设为 true 时必须同时启用 collapsible |
+
+不可折叠分组始终展开。折叠状态仅属于当前页面，不写入 config.json，也不会改动草稿、默认值或完整校验规则。嵌套分组分别保存自己的展开状态；折叠内容不会进入键盘焦点顺序。可折叠标题保持 legend 对边框的自然截断，三角在折叠时朝右、展开时朝下。
+
+收起动画先在 220ms 内缩小内容高度，再用 120ms 渐隐边框；展开先用 120ms 渐显边框，再在 220ms 内展开高度。快速反向点击从当前动画位置过渡，内容尺寸变化也会自动适配。系统开启减少动态效果时直接切换状态。
 
 缺失值补默认值：文本为空串，开关为 false，数组为空数组，数字为 min 或 0，单选为首个选项，对象递归补齐。显式默认值也必须通过字段校验。隐藏字段保留值，保存时仍校验完整结构。模板升级只补缺失字段；不自动迁移旧插件的其他文件。
 

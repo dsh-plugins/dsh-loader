@@ -38,13 +38,14 @@ for (const file of walk(packageDir).filter(file => file.endsWith('.d.ts'))) {
 const subpaths = Object.keys(JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8')).exports)
   .filter(name => !['./package.json', './cordis.patch.yml'].includes(name));
 writeFileSync(join(temp, 'consumer.mts'), subpaths.map((path, index) => `import type * as Entry${index} from '@dsh-plugin/dsh-loader${path === '.' ? '' : path.slice(1)}';`).join('\n') + `
-import { defineConfig, type ConfigHandle } from '@dsh-plugin/dsh-loader/config';
+import { defineConfig, type ConfigHandle, type ConfigField } from '@dsh-plugin/dsh-loader/config';
 import type { HostAPI, CordisContext } from '@dsh-plugin/dsh-loader';
 import type { ToolArgsError } from '@dsh-plugin/dsh-loader/tools';
 import type { SlotCore } from '@dsh-plugin/dsh-loader/ui-slots';
 interface Example { title: string }
 declare const api: HostAPI, ctx: CordisContext;
-const handle: Promise<ConfigHandle<Example>> = api.config.register<Example>(ctx, defineConfig({ id: 'example', packageName: '@example/plugin', title: 'Example', fields: [{ type: 'text', key: 'title', label: 'Title' }] }));
+const group: ConfigField = { type: 'group', label: 'Group', collapsible: true, defaultCollapsed: true, fields: [{ type: 'text', key: 'title', label: 'Title' }] };
+const handle: Promise<ConfigHandle<Example>> = api.config.register<Example>(ctx, defineConfig({ id: 'example', packageName: '@example/plugin', title: 'Example', fields: [group] }));
 `);
 writeFileSync(join(temp, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true, noEmit: true, skipLibCheck: false, module: 'NodeNext', moduleResolution: 'NodeNext', target: 'ES2023', jsx: 'react-jsx', types: ['node', 'react'] }, files: ['consumer.mts'] }));
 const typescriptPackage = require.resolve('typescript/package.json');

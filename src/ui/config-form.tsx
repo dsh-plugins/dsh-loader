@@ -13,8 +13,19 @@ export const CONFIG_CSS = `
 .dshl-config-label{padding-top:6px;white-space:nowrap}.dshl-config-label span{display:inline-block}
 .dshl-config-control{min-width:0}.dshl-config-control input:not([type=checkbox]),.dshl-config-control select,.dshl-config-control textarea{width:100%;box-sizing:border-box;font:inherit;color:inherit;background:transparent;border:1px solid var(--color-border,#8888);border-radius:6px;padding:6px}
 .dshl-config-control option{color:CanvasText;background:Canvas}.dshl-config-control textarea{min-height:80px}
-.dshl-config-group{border:1px solid var(--color-border,#8888);border-radius:10px;min-width:0;margin:16px 0;padding:0 12px 8px}
+.dshl-config-group{border:1px solid var(--color-border,#8888);border-radius:10px;min-width:0;margin:16px 0;padding:0 12px}
 .dshl-config-group legend{padding:0 8px;margin-left:4px;font-weight:500;max-width:100%;overflow-wrap:anywhere}
+.dshl-config-group-body{display:grid;grid-template-rows:1fr}
+.dshl-config-group-clip{min-height:0;overflow:hidden}.dshl-config-group-content{padding-bottom:8px}
+.dshl-config-group[data-collapsible]{--config-group-height-duration:220ms;--config-group-border-duration:120ms;transition:border-color var(--config-group-border-duration) ease}
+.dshl-config-group[data-collapsible]>.dshl-config-group-body{transition:grid-template-rows var(--config-group-height-duration) ease var(--config-group-border-duration)}
+.dshl-config-group[data-expanded=false]{border-color:transparent;transition-delay:var(--config-group-height-duration)}
+.dshl-config-group[data-expanded=false]>.dshl-config-group-body{grid-template-rows:0fr;transition-delay:0s}
+.dshl-config .dshl-config-group-toggle{display:inline-flex;align-items:center;gap:6px;border:0;border-radius:3px;padding:0;font-weight:inherit;text-align:start}
+.dshl-config-group-toggle:focus-visible{outline:2px solid Highlight;outline-offset:3px}
+.dshl-config-group-triangle{width:12px;height:12px;flex:none;transition:transform 180ms ease}
+.dshl-config-group[data-expanded=true]>legend .dshl-config-group-triangle{transform:rotate(90deg)}
+@media(prefers-reduced-motion:reduce){.dshl-config-group[data-collapsible],.dshl-config-group[data-collapsible]>.dshl-config-group-body,.dshl-config-group-triangle{transition:none}}
 .dshl-config-help{font-size:12px;opacity:.7;margin-top:4px}.dshl-config-error{color:var(--color-danger,#d33);font-size:13px;overflow-wrap:anywhere}
 .dshl-config-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}.dshl-config button{font:inherit;color:inherit;background:transparent;border:1px solid var(--color-border,#8888);border-radius:6px;padding:6px 12px;cursor:pointer}.dshl-config button:disabled{opacity:.5;cursor:default}
 .dshl-config-item-array>.dshl-config-control{grid-column:1 / -1}
@@ -27,12 +38,26 @@ function setAt(value: ConfigValues, path: string[], next: ConfigValue): ConfigVa
   for (const key of path.slice(0, -1)) target = target[key] ??= {};
   target[path.at(-1)!] = next; return copy;
 }
+/** Separate fieldset state keeps drafts mounted and each nested group independent. */
+function ConfigGroup({ field, children }: { field: ConfigField; children: React.ReactNode }): React.ReactElement {
+  const [collapsed, setCollapsed] = React.useState(Boolean(field.defaultCollapsed));
+  const expanded = !field.collapsible || !collapsed;
+  const bodyId = React.useId();
+  return <fieldset className="dshl-config-group" data-collapsible={field.collapsible ? '' : undefined} data-expanded={expanded}>
+    <legend>{field.collapsible ? <button className="dshl-config-group-toggle" type="button" aria-expanded={expanded} aria-controls={bodyId} onClick={() => setCollapsed(value => !value)}>
+      <span>{field.label}</span><svg className="dshl-config-group-triangle" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1 L10 6 L3 11 Z" fill="currentColor"/></svg>
+    </button> : field.label}</legend>
+    <div id={bodyId} className="dshl-config-group-body" aria-hidden={!expanded} {...(!expanded ? { inert: '' } : {})}>
+      <div className="dshl-config-group-clip"><div className="dshl-config-group-content">{field.description && <p className="dshl-config-help">{field.description}</p>}{children}</div></div>
+    </div>
+  </fieldset>;
+}
 function Fields({ fields, draft, path = [], change, errors, prefix }: { fields: ConfigField[]; draft: ConfigValues; path?: string[]; change(path: string[], value: ConfigValue): void; errors: Record<string, string>; prefix: string }): React.ReactElement {
   return <>{fields.map((field, index) => {
     if (field.visibleWhen && JSON.stringify(at(draft, field.visibleWhen.path)) !== JSON.stringify(field.visibleWhen.equals)) return null;
     const next = field.type === 'group' ? path : [...path, field.key!];
     const key = next.join('.') + ':' + index;
-    if (field.type === 'group' || field.type === 'object') return <fieldset className="dshl-config-group" key={key}><legend>{field.label}</legend>{field.description && <p className="dshl-config-help">{field.description}</p>}<Fields fields={field.fields!} draft={draft} path={next} change={change} errors={errors} prefix={prefix}/></fieldset>;
+    if (field.type === 'group' || field.type === 'object') return <ConfigGroup field={field} key={key}><Fields fields={field.fields!} draft={draft} path={next} change={change} errors={errors} prefix={prefix}/></ConfigGroup>;
     const value = at(draft, next) ?? fieldDefault(field);
     const id = `${prefix}-${next.map(encodeURIComponent).join('.')}`;
     const error = errors[next.join('.')];
@@ -63,15 +88,17 @@ export function ConfigCard({ view, client }: { view: ConfigView; client: ConfigC
   React.useLayoutEffect(() => {
     const root = form.current; if (!root || !open) return;
     const measure = () => {
-      const widths = [...root.querySelectorAll<HTMLElement>('.dshl-config-label span')].map(label => label.getBoundingClientRect().width);
+      const widths = [...root.querySelectorAll<HTMLElement>('.dshl-config-label span')].filter(label => !label.closest('.dshl-config-group-body[aria-hidden=true]')).map(label => label.getBoundingClientRect().width);
       const width = `${Math.ceil(Math.max(0, ...widths))}px`;
       if (root.style.getPropertyValue('--config-label-width') !== width) root.style.setProperty('--config-label-width', width);
     };
     measure();
     const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
     root.querySelectorAll('.dshl-config-label span').forEach(label => observer?.observe(label));
+    const groups = new MutationObserver(measure);
+    groups.observe(root, { subtree: true, attributes: true, attributeFilter: ['aria-hidden'] });
     document.fonts?.addEventListener('loadingdone', measure);
-    return () => { observer?.disconnect(); document.fonts?.removeEventListener('loadingdone', measure); };
+    return () => { groups.disconnect(); observer?.disconnect(); document.fonts?.removeEventListener('loadingdone', measure); };
   }, [open, draft, view.template]);
   const save = async (event: React.FormEvent) => {
     event.preventDefault(); setBusy(true); setError(''); setErrors({});

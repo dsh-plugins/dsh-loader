@@ -6,10 +6,16 @@
   "fields": [
     { "type": "boolean", "key": "enabled", "label": "启用插件", "default": true },
     { "type": "text", "key": "name", "label": "显示名称", "default": "我的插件", "required": true },
-    { "type": "group", "label": "连接设置", "fields": [
+    { "type": "group", "label": "连接设置", "collapsible": true, "fields": [
       { "type": "text", "key": "endpoint", "label": "服务地址", "default": "https://example.com", "description": "插件使用的服务地址。" },
       { "type": "number", "key": "timeout", "label": "请求超时时间（秒）", "default": 30, "min": 1, "max": 300 },
       { "type": "password", "key": "token", "label": "访问密钥" }
+    ] },
+    { "type": "group", "label": "高级连接设置", "collapsible": true, "defaultCollapsed": true, "fields": [
+      { "type": "object", "key": "retry", "label": "重试策略", "collapsible": true, "fields": [
+        { "type": "number", "key": "count", "label": "重试次数", "default": 2 },
+        { "type": "text", "key": "reason", "label": "重试时的附加说明", "default": "保留草稿值" }
+      ] }
     ] },
     { "type": "select", "key": "mode", "label": "运行模式", "default": "standard", "options": [{ "label": "标准", "value": "standard" }, { "label": "高级", "value": "advanced" }] },
     { "type": "textarea", "key": "notes", "label": "高级说明", "visibleWhen": { "path": ["mode"], "equals": "advanced" } },
