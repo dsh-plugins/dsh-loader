@@ -186,3 +186,72 @@ handle.registerOperation('save', async ({ input, resource, config, signal }) => 
 操作通道不设置短请求超时，适用于首次模型下载等长任务。浏览器调用 `client.invoke(id, operation, request, signal?)` 可传入自己的 AbortSignal；页面离开、取消、客户端 dispose、处理器注销、插件卸载和桥接关闭都会终止相关请求并向宿主 signal 发出取消。**处理器须把 signal 传给下载/文件/网络 IO，并在提交副作用前检查取消**；loader 无法撤销处理器已完成的外部写入，也无法强停忽略 signal 的代码。卸载后的迟到结果会被丢弃。
 
 完整可运行模板和处理器见 [配置示例](../examples/config-plugin/index.mjs) 与 [操作示例](../examples/config-plugin/operations.mjs)：包含搜索、选择回填、导入草稿、Markdown 预览、带 revision 的保存/删除、只读工具 Schema 和可取消的模拟下载。模拟下载不访问真实模型服务，示例文档保存在内存。
+
+## 自定义配置弹窗
+
+配置项可用 `dialog: { id, label? }` 声明自定义编辑器，替代该项的自动生成控件。布局分组 `group` 与临时操作区字段不支持此声明；文本、对象、数组等实际持久化字段均可使用。模板仍是 JSON，弹窗的 React UI 在插件**客户端**独立注册。loader 负责弹窗外壳、确认/取消、配置校验和保存，插件可以自由设计弹窗内部界面。
+
+宿主模板示例：
+
+```ts
+{ type: 'object', key: 'document', label: '文档配置',
+  dialog: { id: 'document-editor', label: '编辑文档配置' },
+  fields: [{ type: 'text', key: 'text', label: '正文', default: '示例内容', required: true }] }
+```
+
+客户端注入 `dshLoaderUi`，通过 `ctx.dshLoaderUi.config.registerDialog(ownerCtx, options)` 注册：
+
+```tsx
+import * as React from 'react';
+import type { ConfigDialogProps, DshLoaderUi } from '@dsh-plugin/dsh-loader/client';
+
+export const inject = ['dshLoaderUi'];
+function Editor({ value, setValue, saving, save }: ConfigDialogProps<{ text: string }>) {
+  return <>
+    <textarea value={value.text} onChange={event => setValue({ text: event.target.value })}/>
+    <button type="button" disabled={saving}
+      onClick={() => { void save().catch(() => {}); }}>插件保存</button>
+  </>;
+}
+export function apply(ctx: {
+  effect(fn: () => (() => void) | void): unknown;
+  dshLoaderUi: DshLoaderUi;
+}) {
+  const dialog = ctx.dshLoaderUi.config.registerDialog<{ text: string }>(ctx, {
+    id: 'document-editor', configId: 'example-plugin', field: ['document'],
+    title: '编辑文档', component: Editor,
+  });
+  // 模板按钮会自动打开弹窗；插件自己的菜单/按钮也可调用 dialog.open()。
+  // const session = await dialog.open();
+  // await session.save(); // 或 await dialog.save()，保存成功后保持打开
+}
+```
+
+`id` 在当前 `configId` 内唯一，`field` 是从配置根开始的路径，必须指向宿主已声明且当前存在的字段。同一注册重复打开会复用当前弹窗。客户端 UI 尚未注册时模板按钮禁用，卸载后也会恢复禁用。程序化 `open()` 不要求字段带 dialog 属性，因此也可以从插件自己的入口打开；它仍须绑定合法配置项。弹窗从已保存配置读取值，普通配置卡片尚未保存的草稿不会混入弹窗。
+
+| 句柄 / UI 属性 | 行为 |
+| --- | --- |
+| `handle.open()` | 读取最新配置，挂载 UI 后返回 session；同一注册只保留一个弹窗 |
+| `handle.save()` / `session.save()` / UI 的 `save()` | 使用同一保存过程，返回已提交 `ConfigView`，保持打开 |
+| `value` / `setValue(value)` | 当前配置项值的副本及受控 UI 更新；setValue 只改弹窗草稿 |
+| `setReader((signal) => value或Promise)` | 注册保存时读取编辑器数据的函数，返回幂等注销函数；最近仍有效的 reader 生效 |
+| `saving` / `error` / `errors` | 保存中、错误摘要、按配置根路径标记的字段错误 |
+| `close()` / `handle.close()` | 取消并关闭，不发起保存；取消未完成的数据读取或请求 |
+| `handle.dispose()` | 解除注册并关闭弹窗；随传入 owner 自动执行 |
+
+自带状态的代码编辑器不必逐字同步到 setValue，可以在组件中注册读取函数：
+
+```tsx
+React.useEffect(() => setReader(async signal => {
+  signal.throwIfAborted();
+  return { text: await editor.getValue() };
+}), [editor, setReader]);
+```
+
+点击 loader 的“确认”与插件调用 `.save()` 都先等待 reader（未注册时读取 value），再把结果写回绑定字段，并通过现有配置 API 携带配置 `expectedRevision` 提交。**这里保存的是 config.json，与临时操作区的资源写操作不同。** 读取函数应返回该配置项的完整 JSON 值；对象、数组字段整体替换，其他配置项保留原值，密码引用仍按现有规则处理。成功后更新当前弹窗修订号；“确认”随后关闭，`.save()` 保持打开供继续编辑。
+
+异步读取/保存期间显示“保存中…”，禁用原生表单控件与确认按钮，重复调用共用同一个 Promise。自定义编辑器也可读取 saving 来禁用自己的交互。数据读取失败、宿主校验失败或 HTTP 409 冲突都保持弹窗和编辑内容，不自动覆盖或重试；错误显示在弹窗内。其他页面或普通配置卡片发生修改时，弹窗仍持有原修订号以检测冲突；可取消后重新打开获取最新值。弹窗保存时若普通卡片已有未保存草稿，该草稿继续保留，随后普通保存同样接受修订冲突检查。
+
+“取消”、Escape、close 和插件卸载均不自动保存。关闭会向 reader 和正在等待的请求发出 AbortSignal，并丢弃迟到结果；已在宿主提交的写入无法通过关闭撤销。UI 使用原生 modal dialog 管理焦点和背景交互，关闭后恢复原焦点；每个弹窗是独立 React 根，插件可自行包裹需要的 Provider。插件渲染异常会显示错误并禁用确认，避免保存未正常显示的编辑器。
+
+[自定义弹窗示例](../examples/config-plugin/client.tsx) 使用非受控输入和 setReader，同时演示插件按钮 `.save()` 与外壳“确认”。将此文件按插件现有构建流程编译为客户端 bundle，并保持 React、React DOM 和 `@dsh-plugin/dsh-loader/client` 为 external；它不由宿主 index.mjs 自动执行。通用配置表单和临时操作区继续由 loader 统一生成，自定义 UI 仅用于显式注册的弹窗。

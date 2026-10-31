@@ -18,7 +18,7 @@ const packageDir = join(temp, 'node_modules/@dsh-plugin/dsh-loader');
 mkdirSync(packageDir, { recursive: true });
 run('tar', ['-xf', join(temp, packed.filename), '-C', packageDir, '--strip-components=1']);
 assert.equal(JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8')).version, '2.0.0');
-for (const file of ['README.zh_CN.md', 'docs/config-api.md', 'docs/support.md', 'examples/config-plugin/index.mjs', 'examples/config-plugin/operations.mjs']) {
+for (const file of ['README.zh_CN.md', 'docs/config-api.md', 'docs/support.md', 'examples/config-plugin/index.mjs', 'examples/config-plugin/operations.mjs', 'examples/config-plugin/client.tsx']) {
   assert(packed.files.some(entry => entry.path === file), `Missing packed documentation: ${file}`);
 }
 const link = (name) => {
@@ -42,8 +42,12 @@ import { defineConfig, type ConfigHandle, type ConfigField } from '@dsh-plugin/d
 import type { HostAPI, CordisContext } from '@dsh-plugin/dsh-loader';
 import type { ToolArgsError } from '@dsh-plugin/dsh-loader/tools';
 import type { SlotCore } from '@dsh-plugin/dsh-loader/ui-slots';
+import type { DshLoaderUi, ConfigDialogProps } from '@dsh-plugin/dsh-loader/client';
 interface Example { title: string }
 declare const api: HostAPI, ctx: CordisContext;
+declare const ui: DshLoaderUi;
+const dialog = ui.config.registerDialog<Example>(ctx, { id: 'editor', configId: 'example', field: ['document'], title: 'Editor', component(props: ConfigDialogProps<Example>) { props.setReader(async signal => { signal.throwIfAborted(); return { title: props.value.title }; }); return null; } });
+dialog.open().then(session => session.save());
 const group: ConfigField = { type: 'group', label: 'Group', collapsible: true, defaultCollapsed: true, fields: [{ type: 'text', key: 'title', label: 'Title' }] };
 const handle: Promise<ConfigHandle<Example>> = api.config.register<Example>(ctx, defineConfig({ id: 'example', packageName: '@example/plugin', title: 'Example', fields: [group] }));
 handle.then(config => config.registerOperation('preview', ({ input, resource, config: saved, signal }) => ({ value: { text: String(input.text), revision: saved.revision, aborted: signal.aborted }, ...(resource ? { resource } : {}) })));

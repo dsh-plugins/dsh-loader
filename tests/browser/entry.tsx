@@ -3,9 +3,13 @@ import { createRoot } from 'react-dom/client';
 import { createConfigClient } from '../../src/config-client.js';
 import { createBootDescriptor } from '../../src/bootstrap.js';
 import { installConfigUI } from '../../src/ui/config-form.js';
+import { createConfigDialogs } from '../../src/ui/config-dialogs.js';
+import { apply as applyDialogExample } from '../../examples/config-plugin/client.js';
 const version = new URLSearchParams(location.search).get('version') ?? '0.1.5-rc.3';
 const boot = createBootDescriptor(version, 'dsh-' + version.split('-')[0]);
 const client = createConfigClient(fetch.bind(window), url => new EventSource(url));
+const dialogs = createConfigDialogs(client), releases: (() => void)[] = [];
+applyDialogExample({ effect(fn) { const off = fn(); if (off) releases.push(off); }, dshLoaderUi: { config: dialogs } });
 const root = createRoot(document.getElementById('root')!);
 const slots = {
   inject(_name: string, register: () => unknown) { register(); return () => root.render(null); },
@@ -14,7 +18,8 @@ const slots = {
     root.render(<Component/>);
   },
 };
-installConfigUI({ get: () => slots }, client, boot);
+const offUI = installConfigUI({ get: () => slots }, client, boot, dialogs);
+window.addEventListener('beforeunload', () => { for (const off of releases) off(); offUI(); dialogs.dispose(); client.dispose(); });
 document.getElementById('theme')!.onclick = () => document.body.classList.toggle('dark');
 
 // Record actual browser transition events for phase-order verification.

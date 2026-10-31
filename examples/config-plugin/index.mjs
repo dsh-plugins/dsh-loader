@@ -11,6 +11,10 @@ export const template = defineConfig({
   fields: [
     { type: 'text', key: 'displayName', label: '显示名称', default: '示例', required: true },
     { type: 'boolean', key: 'enabled', label: '启用', default: true },
+    { type: 'object', key: 'document', label: '文档配置', dialog: { id: 'document-editor', label: '编辑文档配置' }, fields: [
+      { type: 'text', key: 'title', label: '文档标题', default: '示例文档', required: true },
+      { type: 'textarea', key: 'content', label: '文档正文', default: '配置弹窗的示例内容', required: true },
+    ] },
     { type: 'array', key: 'models', label: '可选模型', default: ['example-model'], item: { type: 'text', label: '模型 ID', required: true } },
     { type: 'group', label: '连接', collapsible: true, defaultCollapsed: false, fields: [
       { type: 'text', key: 'endpoint', label: '服务地址', default: 'https://example.com', pattern: '^https?://', description: '以 http:// 或 https:// 开头。' },

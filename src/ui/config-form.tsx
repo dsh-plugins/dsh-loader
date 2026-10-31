@@ -4,6 +4,7 @@ import type { ConfigClient } from '../config-client.js';
 import type { BootDescriptor } from '../bootstrap.js';
 import { Fields, setAt } from './config-fields.js';
 import { OperationPanel } from './config-operations.js';
+import type { ConfigDialogsAPI } from './config-dialogs.js';
 
 export const CONFIG_CSS = `
 .dshl-config{color:var(--color-text-primary,inherit);font:inherit;width:100%;box-sizing:border-box}
@@ -38,7 +39,7 @@ export const CONFIG_CSS = `
 .dshl-config-result img{max-width:100%}.dshl-config-json{border:1px solid var(--color-border,#8886);border-radius:8px;padding:8px}
 @media(max-width:480px){.dshl-config-card{padding:8px}.dshl-config-item{gap:8px}.dshl-config-group{padding-left:8px;padding-right:8px}.dshl-config-control input,.dshl-config-control select{min-width:0}}
 `;
-export function ConfigCard({ view, client }: { view: ConfigView; client: ConfigClient }): React.ReactElement {
+export function ConfigCard({ view, client, dialogs }: { view: ConfigView; client: ConfigClient; dialogs?: ConfigDialogsAPI }): React.ReactElement {
   const [base, setBase] = React.useState(view);
   const [draft, setDraft] = React.useState(view.value);
   const [dirty, setDirty] = React.useState(false);
@@ -48,6 +49,8 @@ export function ConfigCard({ view, client }: { view: ConfigView; client: ConfigC
   const [open, setOpen] = React.useState(false);
   const form = React.useRef<HTMLDivElement>(null);
   const prefix = React.useId();
+  const [, refreshDialogs] = React.useReducer(value => value + 1, 0);
+  React.useEffect(() => dialogs?.subscribe(refreshDialogs), [dialogs]);
   React.useEffect(() => { if (!dirty && view.revision >= base.revision) { setBase(view); setDraft(view.value); } }, [view, dirty, base.revision]);
   React.useLayoutEffect(() => {
     const root = form.current; if (!root || !open) return;
@@ -71,13 +74,13 @@ export function ConfigCard({ view, client }: { view: ConfigView; client: ConfigC
     finally { setBusy(false); }
   };
   return <details className="dshl-config-card" onToggle={event => setOpen(event.currentTarget.open)}><summary>{view.template.title}</summary>{view.template.description && <p>{view.template.description}</p>}<div className="dshl-config-form" ref={form}><form noValidate onSubmit={save}>
-    <fieldset className="dshl-config-fields" disabled={busy}><Fields fields={view.template.fields} draft={draft} errors={errors} prefix={prefix} change={(path, value) => { setDraft(current => setAt(current, path, value)); setDirty(true); }}/></fieldset>
+    <fieldset className="dshl-config-fields" disabled={busy}><Fields dialog={(field, path, id) => <button type="button" id={id} disabled={!dialogs?.hasDialog(view.template.id, field.dialog!.id, path)} onClick={() => { void dialogs!.openDialog(view.template.id, field.dialog!.id, path).catch(cause => setError(cause instanceof Error ? cause.message : String(cause))); }}>{field.dialog!.label ?? '打开配置弹窗'}</button>} fields={view.template.fields} draft={draft} errors={errors} prefix={prefix} change={(path, value) => { setDraft(current => setAt(current, path, value)); setDirty(true); }}/></fieldset>
     {dirty && view.revision !== base.revision && <p role="status">配置已有更新；保存前请取消修改以加载最新值。</p>}
     {error && <p role="alert" className="dshl-config-error">{error}</p>}
     <div className="dshl-config-actions"><button type="submit" disabled={busy || !dirty}>{busy ? '保存中…' : '保存'}</button><button type="button" disabled={busy} onClick={() => { const latest = view.revision >= base.revision ? view : base; setBase(latest); setDraft(latest.value); setDirty(false); setError(''); setErrors({}); }}>取消修改</button><button type="button" disabled={busy} onClick={() => { setDraft(structuredClone(view.defaults)); setDirty(true); }}>恢复默认值</button></div>
   </form>{view.template.panels?.map(panel => <OperationPanel key={panel.id} pluginId={view.template.id} panel={panel} client={client} saved={base.revision > view.revision ? base.value : view.value} available={view.availableOperations}/>)}</div></details>;
 }
-export function ConfigPage({ client, ids }: { client: ConfigClient; ids?: string[] }): React.ReactElement {
+export function ConfigPage({ client, ids, dialogs }: { client: ConfigClient; ids?: string[]; dialogs?: ConfigDialogsAPI }): React.ReactElement {
   const [views, setViews] = React.useState<ConfigView[]>([]);
   const [error, setError] = React.useState('');
   React.useEffect(() => {
@@ -86,17 +89,17 @@ export function ConfigPage({ client, ids }: { client: ConfigClient; ids?: string
     const off = client.subscribe(refresh); refresh();
     return () => { active = false; off(); };
   }, [client]);
-  return <div className="dshl-config"><style>{CONFIG_CSS}</style>{error && <p role="alert">{error}</p>}{views.filter(view => !ids || ids.includes(view.template.id)).map(view => <ConfigCard key={view.template.id} view={view} client={client}/>)}{!views.length && !error && <p>暂无已注册的插件配置。</p>}</div>;
+  return <div className="dshl-config"><style>{CONFIG_CSS}</style>{error && <p role="alert">{error}</p>}{views.filter(view => !ids || ids.includes(view.template.id)).map(view => <ConfigCard key={view.template.id} view={view} client={client} dialogs={dialogs}/>)}{!views.length && !error && <p>暂无已注册的插件配置。</p>}</div>;
 }
 /** All slot registration is loader-owned; plugins supply only templates. */
-export function installConfigUI(ctx: any, client: ConfigClient, boot: BootDescriptor): () => void {
+export function installConfigUI(ctx: any, client: ConfigClient, boot: BootDescriptor, dialogs?: ConfigDialogsAPI): () => void {
   let disposed = false;
   let generation = 0;
   const registrations = new Map<string, () => void>();
   const slots = ctx.get?.('slots');
   if (!slots) return () => {};
   const add = (name: string, id: string, ids?: string[]) => {
-    const off = slots.inject(name, () => slots.register({ name, id: `dshloader:${id}`, ...(name !== 'settings.section' ? { key: id } : {}), label: () => '插件配置', order: 40, inject: () => ({}) }, () => <ConfigPage client={client} ids={ids}/>));
+    const off = slots.inject(name, () => slots.register({ name, id: `dshloader:${id}`, ...(name !== 'settings.section' ? { key: id } : {}), label: () => '插件配置', order: 40, inject: () => ({}) }, () => <ConfigPage client={client} ids={ids} dialogs={dialogs}/>));
     registrations.set(id, typeof off === 'function' ? off : () => {});
   };
   const sync = async () => {

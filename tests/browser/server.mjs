@@ -14,6 +14,10 @@ const profile = resolve('.cache/browser/profile'); await mkdir(profile, { recurs
 const store = new ConfigStore(profile), releases = [];
 const template = JSON.parse(await readFile(new URL('../fixtures/config-example.json', import.meta.url), 'utf8'));
 template.fields.push({ type: 'array', key: 'models', label: '可选模型', default: ['example-model'], item: { type: 'text', label: '模型 ID' } });
+template.fields.push({ type: 'object', key: 'document', label: '文档配置', dialog: { id: 'document-editor', label: '编辑文档配置' }, fields: [
+  { type: 'text', key: 'title', label: '文档标题', default: '示例文档', required: true },
+  { type: 'textarea', key: 'content', label: '文档正文', default: '配置弹窗的示例内容', required: true },
+] });
 template.panels = [structuredClone(operationsPanel)];
 template.panels[0].operations.push({ id: 'test.external', input: ['documentId'], button: { label: '模拟其他页面修改' } });
 const handle = await store.register({ effect(fn) { releases.push(fn()); } }, template);

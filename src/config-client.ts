@@ -3,7 +3,7 @@ import type { ConfigOperationRequest, ConfigOperationResult, ConfigValues, Confi
 export interface ConfigClient {
   list(): Promise<ConfigView[]>;
   read(id: string): Promise<ConfigView>;
-  update(id: string, value: ConfigValues, expectedRevision: number): Promise<ConfigView>;
+  update(id: string, value: ConfigValues, expectedRevision: number, signal?: AbortSignal): Promise<ConfigView>;
   reset(id: string, expectedRevision: number): Promise<ConfigView>;
   invoke(id: string, operation: string, request: ConfigOperationRequest, signal?: AbortSignal): Promise<ConfigOperationResult>;
   subscribe(listener: () => void): () => void;
@@ -27,7 +27,7 @@ export function createConfigClient(fetch: (url: string, init?: any) => Promise<a
   };
   return {
     list: () => request(''), read: id => request('/' + encodeURIComponent(id)),
-    update: (id, value, expectedRevision) => request('/' + encodeURIComponent(id), { value, expectedRevision }),
+    update: (id, value, expectedRevision, signal) => request('/' + encodeURIComponent(id), { value, expectedRevision }, signal),
     reset: (id, expectedRevision) => request('/' + encodeURIComponent(id) + '/reset', { expectedRevision }),
     async invoke(id, operation, body, signal) {
       const controller = new AbortController();

@@ -21,6 +21,8 @@ export interface ConfigField {
   collapsible?: boolean;
   /** Initial UI state when collapsible=true; never stored as a config value. */
   defaultCollapsed?: boolean;
+  /** Optional client-registered editor for this persisted field. UI code stays in the client plugin. */
+  dialog?: { id: string; label?: string };
 }
 export interface ConfigTemplate {
   id: string;
@@ -97,6 +99,7 @@ export function validateTemplate(template: ConfigTemplate): void {
       if ((field.collapsible !== undefined && typeof field.collapsible !== 'boolean') || (field.defaultCollapsed !== undefined && typeof field.defaultCollapsed !== 'boolean')) throw new ConfigError('invalid-template', 'Collapse options must be boolean');
       if ((field.collapsible !== undefined || field.defaultCollapsed !== undefined) && !['group', 'object'].includes(field.type)) throw new ConfigError('invalid-template', 'Collapse options require a group or object');
       if (field.defaultCollapsed && !field.collapsible) throw new ConfigError('invalid-template', 'defaultCollapsed requires collapsible=true');
+      if (field.dialog !== undefined && (transient || field.type === 'group' || !field.dialog || Array.isArray(field.dialog) || typeof field.dialog.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(field.dialog.id) || unsafe.has(field.dialog.id) || field.dialog.label !== undefined && (typeof field.dialog.label !== 'string' || !field.dialog.label))) throw new ConfigError('invalid-template', 'Invalid config dialog declaration');
       if (field.visibleWhen && (!Array.isArray(field.visibleWhen.path) || !field.visibleWhen.path.length || field.visibleWhen.path.some(key => typeof key !== 'string' || unsafe.has(key)) || field.visibleWhen.equals === undefined)) throw new ConfigError('invalid-template', 'Invalid visibility condition');
       if ((field.min !== undefined && !Number.isFinite(field.min)) || (field.max !== undefined && !Number.isFinite(field.max)) || (field.min !== undefined && field.max !== undefined && field.min > field.max)) throw new ConfigError('invalid-template', 'Invalid field bounds');
       if (field.optionsFrom !== undefined && (!transient || !['select','multiselect'].includes(field.type) || field.options || !field.optionsFrom || typeof field.optionsFrom !== 'object' || Array.isArray(field.optionsFrom))) throw new ConfigError('invalid-template', 'Dynamic options require a transient selection without static options');

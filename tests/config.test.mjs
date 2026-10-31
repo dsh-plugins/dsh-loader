@@ -122,3 +122,22 @@ test('invalid collapse metadata is rejected before registration',()=>{
   }
   assert.throws(()=>build({type:'text',key:'name',label:'Name',collapsible:true}),error=>error.code==='invalid-template');
 });
+
+test('dialog metadata is serializable and field values keep host validation and persistence', async t => {
+  const { store, context, root } = await fixture(t);
+  const handle = await store.register(context, defineConfig({ id: 'dialog', packageName: '@example/dialog', title: 'Dialog', fields: [
+    { type: 'object', key: 'document', label: 'Document', dialog: { id: 'editor', label: 'Edit' }, fields: [{ type: 'text', key: 'title', label: 'Title', default: 'before', required: true }] },
+  ] }));
+  const view = store.read('dialog'); assert.equal(view.template.fields[0].dialog.id, 'editor');
+  await assert.rejects(store.write('dialog', { document: { title: '' } }, 0), error => error.code === 'validation');
+  await store.write('dialog', { document: { title: 'from dialog' } }, 0);
+  assert.equal(handle.get().value.document.title, 'from dialog');
+  const disk = JSON.parse(await readFile(join(root, 'config/dialog/config.json'), 'utf8'));
+  assert.deepEqual(disk.value, { document: { title: 'from dialog' } }); assert.equal(disk.revision, 1);
+});
+test('invalid or executable dialog declarations and transient dialog fields are rejected', () => {
+  const build = field => defineConfig({ id: 'dialog', packageName: '@example/dialog', title: 'Dialog', fields: [field] });
+  for (const dialog of [null, { id: '../editor' }, { id: 'constructor' }, { id: 'editor', label: 5 }, { id: 'editor', render() {} }]) assert.throws(() => build({ type: 'text', key: 'title', label: 'Title', dialog }));
+  assert.throws(() => build({ type: 'group', label: 'Group', fields: [], dialog: { id: 'editor' } }));
+  assert.throws(() => defineConfig({ id: 'dialog', packageName: '@example/dialog', title: 'Dialog', fields: [], panels: [{ id: 'panel', title: 'Panel', fields: [{ type: 'text', key: 'draft', label: 'Draft', dialog: { id: 'editor' } }], operations: [] }] }));
+});

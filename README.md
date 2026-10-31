@@ -46,6 +46,8 @@ Register a JSON template through `config.register(ownerCtx, template)`. Values p
 
 Templates can also declare transient operation panels with host handlers registered through `handle.registerOperation()`: async options, selection-to-editor bindings, editing/import, read-only Markdown/list/JSON results, cancellable long tasks, and resource revision conflicts. Operation drafts never enter the configuration file.
 
+Fields can also open custom dialogs registered by the client through `dshLoaderUi.config.registerDialog()`. Plugins provide a React UI and a data reader; `.save()` and the Confirm button share revision-checked configuration persistence, retaining editor contents on failure.
+
 Before dsh 0.1.6-alpha.2, forms appear under More → Settings → Plugin configuration. Newer versions use the corresponding native plugin detail page. Every plugin has a collapsed card with measured equal-width labels and fieldset groups. Save, cancel, and restore-defaults work per card; failed or conflicting saves preserve drafts.
 
 - [Configuration API and example](docs/config-api.md)
