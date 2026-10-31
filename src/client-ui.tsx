@@ -3,7 +3,7 @@ import { createConfigClient } from './config-client.js';
 import { installConfigUI } from './ui/config-form.js';
 export { createConfigClient } from './config-client.js';
 export type { ConfigClient } from './config-client.js';
-export type { ConfigTemplate, ConfigField, ConfigValues, ConfigView } from './config.js';
+export type { ConfigTemplate, ConfigField, ConfigValues, ConfigView, ConfigPanel, ConfigOperation, ConfigOperationRequest, ConfigOperationResult, ConfigResource, ConfigResultDisplay } from './config.js';
 /**
  * dshloader BROWSER BUNDLE ENTRY.
  *

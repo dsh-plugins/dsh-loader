@@ -44,6 +44,8 @@ Inject `dshLoader` to access `config`, `settings`, `web`, `services`, `registry`
 
 Register a JSON template through `config.register(ownerCtx, template)`. Values persist at `<profile>/config/<pluginID>/config.json`, independently of host settings and `exposeAllNamespaces`. Templates support groups, objects, arrays, passwords, validation, and declarative visibility.
 
+Templates can also declare transient operation panels with host handlers registered through `handle.registerOperation()`: async options, selection-to-editor bindings, editing/import, read-only Markdown/list/JSON results, cancellable long tasks, and resource revision conflicts. Operation drafts never enter the configuration file.
+
 Before dsh 0.1.6-alpha.2, forms appear under More → Settings → Plugin configuration. Newer versions use the corresponding native plugin detail page. Every plugin has a collapsed card with measured equal-width labels and fieldset groups. Save, cancel, and restore-defaults work per card; failed or conflicting saves preserve drafts.
 
 - [Configuration API and example](docs/config-api.md)

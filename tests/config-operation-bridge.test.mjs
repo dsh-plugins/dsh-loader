@@ -1,0 +1,41 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { ConfigStore } from '../dist/services/config.js';
+import { ConfigError } from '../dist/config.js';
+import { installConfigBridge } from '../dist/services/config-bridge.js';
+test('operations reuse host authentication, POST/origin restrictions and resource conflicts; disconnect and bridge disposal cancel calls', async t => {
+  const profile = await mkdtemp(join(tmpdir(), 'dsh-operation-http-')), store = new ConfigStore(profile), releases = [];
+  const owner = { effect(fn) { releases.push(fn()); } };
+  const handle = await store.register(owner, { id: 'http', packageName: 'http-example', title: 'HTTP', fields: [], panels: [{ id: 'editor', title: 'Editor', fields: [{ type: 'text', key: 'content', label: 'Content', required: true }], operations: [
+    { id: 'save', requiresRevision: true }, { id: 'slow', readOnly: true },
+  ] }] });
+  let revision = 1, calls = 0, started, cancelled;
+  handle.registerOperation('save', async ({ input, resource }) => { calls++; if (resource.revision !== revision) throw new ConfigError('conflict', 'resource conflict'); revision++; return { value: input.content, resource: { id: resource.id, revision } }; });
+  handle.registerOperation('slow', ({ signal }) => { started?.(); signal.addEventListener('abort', () => cancelled?.(), { once: true }); return new Promise(() => {}); });
+  let handler;
+  const off = installConfigBridge({ register(_path, fn) { handler = fn; return () => {}; } }, store, (request, response) => { if (request.headers.cookie === 'session=test') return true; response.writeHead(401).end(); return false; });
+  const server = createServer((req, res) => handler(req, res)); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(async () => { off(); for (const release of releases) release?.(); store.dispose(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); await rm(profile, { recursive: true, force: true }); });
+  const url = `http://127.0.0.1:${server.address().port}/api/dshloader/config/http/operations/`, headers = { cookie: 'session=test', 'content-type': 'application/json' };
+  const body = { input: { content: 'temporary' }, resource: { id: 'document', revision: 1 } };
+  const post = (id, overrides = {}) => fetch(url + id, { method: 'POST', headers, body: JSON.stringify(body), ...overrides });
+  assert.equal((await post('save', { headers: { 'content-type': 'application/json' } })).status, 401);
+  assert.equal((await post('save', { headers: { ...headers, origin: 'https://elsewhere.example' } })).status, 403);
+  assert.equal((await fetch(url + 'save', { headers })).status, 405);
+  assert.equal((await post('unknown')).status, 404);
+  assert.equal((await post('save', { body: 'null' })).status, 400);
+  assert.equal((await post('save', { body: JSON.stringify({ input: { content: '' }, resource: body.resource }) })).status, 400);
+  assert.equal(calls, 0);
+  const first = await post('save'); assert.equal(first.status, 200); assert.equal((await first.json()).value.resource.revision, 2);
+  assert.equal((await post('save')).status, 409); assert.equal(store.read('http').revision, 0);
+  const startedPromise = new Promise(resolve => started = resolve), cancelledPromise = new Promise(resolve => cancelled = resolve);
+  const controller = new AbortController(); const pending = post('slow', { signal: controller.signal });
+  await startedPromise; controller.abort(); await assert.rejects(pending, { name: 'AbortError' }); await cancelledPromise;
+  const again = new Promise(resolve => started = resolve), disposed = new Promise(resolve => cancelled = resolve);
+  const waiting = post('slow'); await again; off(); await disposed;
+  assert.equal((await waiting).status, 400);
+});

@@ -18,7 +18,7 @@ const view: ConfigView = {
   ] }, value: { name: 'before', timeout: 5, advanced: false, detail: '', list: [] }, defaults: { name: 'default', timeout: 3, advanced: false, detail: '', list: [] }, revision: 1,
 };
 function client(): ConfigClient {
-  return { list: vi.fn(async () => [view]), read: vi.fn(async () => view), update: vi.fn(async (_id, value, revision) => ({ ...view, value, revision: revision + 1 })), reset: vi.fn(), subscribe: vi.fn(() => () => {}), dispose: vi.fn() };
+  return { list: vi.fn(async () => [view]), read: vi.fn(async () => view), update: vi.fn(async (_id, value, revision) => ({ ...view, value, revision: revision + 1 })), reset: vi.fn(), invoke: vi.fn(), subscribe: vi.fn(() => () => {}), dispose: vi.fn() };
 }
 function render(api = client(), customView = view) {
   const container = document.createElement('div'); document.body.append(container); root = createRoot(container);
@@ -123,7 +123,7 @@ it('remeasures labels when a group expands or folds',async()=>{
   const {container}=render(client(),custom);
   const details=container.querySelector('details')!;
   act(()=>{details.open=true;details.dispatchEvent(new Event('toggle'))});
-  const form=container.querySelector('form')!;
+  const form=container.querySelector<HTMLElement>('.dshl-config-form')!;
   expect(form.style.getPropertyValue('--config-label-width')).toBe('30px');
   await act(async()=>{click(container,'连接');await Promise.resolve()});
   expect(form.style.getPropertyValue('--config-label-width')).toBe('120px');

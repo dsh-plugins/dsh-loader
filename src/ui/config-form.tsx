@@ -1,7 +1,9 @@
 import * as React from 'react';
-import { fieldDefault, type ConfigField, type ConfigValue, type ConfigValues, type ConfigView, ConfigError } from '../config.js';
+import { type ConfigView, ConfigError } from '../config.js';
 import type { ConfigClient } from '../config-client.js';
 import type { BootDescriptor } from '../bootstrap.js';
+import { Fields, setAt } from './config-fields.js';
+import { OperationPanel } from './config-operations.js';
 
 export const CONFIG_CSS = `
 .dshl-config{color:var(--color-text-primary,inherit);font:inherit;width:100%;box-sizing:border-box}
@@ -30,50 +32,12 @@ export const CONFIG_CSS = `
 .dshl-config-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}.dshl-config button{font:inherit;color:inherit;background:transparent;border:1px solid var(--color-border,#8888);border-radius:6px;padding:6px 12px;cursor:pointer}.dshl-config button:disabled{opacity:.5;cursor:default}
 .dshl-config-item-array>.dshl-config-control{grid-column:1 / -1}
 .dshl-config-array{min-width:0}.dshl-config-array>section{border-left:2px solid #8885;padding-left:8px;margin:8px 0}
+.dshl-config-panel{border-top:1px solid var(--color-border,#8886);margin-top:24px;padding-top:8px;min-width:0}
+.dshl-config-panel h3{font-size:1em}.dshl-config-result,.dshl-config-json{margin-top:12px;overflow-wrap:anywhere;min-width:0}
+.dshl-config-result pre,.dshl-config-json pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:420px;overflow:auto;font-size:.9em}
+.dshl-config-result img{max-width:100%}.dshl-config-json{border:1px solid var(--color-border,#8886);border-radius:8px;padding:8px}
 @media(max-width:480px){.dshl-config-card{padding:8px}.dshl-config-item{gap:8px}.dshl-config-group{padding-left:8px;padding-right:8px}.dshl-config-control input,.dshl-config-control select{min-width:0}}
 `;
-function at(value: ConfigValues, path: string[]): ConfigValue | undefined { return path.reduce<any>((v, key) => v?.[key], value); }
-function setAt(value: ConfigValues, path: string[], next: ConfigValue): ConfigValues {
-  const copy = structuredClone(value); let target: any = copy;
-  for (const key of path.slice(0, -1)) target = target[key] ??= {};
-  target[path.at(-1)!] = next; return copy;
-}
-/** Separate fieldset state keeps drafts mounted and each nested group independent. */
-function ConfigGroup({ field, children }: { field: ConfigField; children: React.ReactNode }): React.ReactElement {
-  const [collapsed, setCollapsed] = React.useState(Boolean(field.defaultCollapsed));
-  const expanded = !field.collapsible || !collapsed;
-  const bodyId = React.useId();
-  return <fieldset className="dshl-config-group" data-collapsible={field.collapsible ? '' : undefined} data-expanded={expanded}>
-    <legend>{field.collapsible ? <button className="dshl-config-group-toggle" type="button" aria-expanded={expanded} aria-controls={bodyId} onClick={() => setCollapsed(value => !value)}>
-      <span>{field.label}</span><svg className="dshl-config-group-triangle" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1 L10 6 L3 11 Z" fill="currentColor"/></svg>
-    </button> : field.label}</legend>
-    <div id={bodyId} className="dshl-config-group-body" aria-hidden={!expanded} {...(!expanded ? { inert: '' } : {})}>
-      <div className="dshl-config-group-clip"><div className="dshl-config-group-content">{field.description && <p className="dshl-config-help">{field.description}</p>}{children}</div></div>
-    </div>
-  </fieldset>;
-}
-function Fields({ fields, draft, path = [], change, errors, prefix }: { fields: ConfigField[]; draft: ConfigValues; path?: string[]; change(path: string[], value: ConfigValue): void; errors: Record<string, string>; prefix: string }): React.ReactElement {
-  return <>{fields.map((field, index) => {
-    if (field.visibleWhen && JSON.stringify(at(draft, field.visibleWhen.path)) !== JSON.stringify(field.visibleWhen.equals)) return null;
-    const next = field.type === 'group' ? path : [...path, field.key!];
-    const key = next.join('.') + ':' + index;
-    if (field.type === 'group' || field.type === 'object') return <ConfigGroup field={field} key={key}><Fields fields={field.fields!} draft={draft} path={next} change={change} errors={errors} prefix={prefix}/></ConfigGroup>;
-    const value = at(draft, next) ?? fieldDefault(field);
-    const id = `${prefix}-${next.map(encodeURIComponent).join('.')}`;
-    const error = errors[next.join('.')];
-    let control: React.ReactNode;
-    const props = { id, 'aria-invalid': Boolean(error), 'aria-describedby': field.description || error ? `${id}-help` : undefined };
-    if (field.type === 'array') control = <div className="dshl-config-array">{(Array.isArray(value) ? value : []).map((_, itemIndex) => <section key={itemIndex}><Fields fields={[{ ...field.item!, key: String(itemIndex) }]} path={next} draft={draft} change={change} errors={errors} prefix={prefix}/><button type="button" onClick={() => change(next, (value as ConfigValue[]).filter((_, i) => i !== itemIndex))}>删除第 {itemIndex + 1} 项</button></section>)}<button type="button" onClick={() => change(next, [...value as ConfigValue[], fieldDefault(field.item!)])}>新增</button></div>;
-    else if (field.type === 'boolean') control = <input {...props} type="checkbox" checked={value === true} onChange={event => change(next, event.target.checked)}/>;
-    else if (field.type === 'select' || field.type === 'multiselect') control = <select {...props} multiple={field.type === 'multiselect'} value={field.type === 'multiselect' ? (value as ConfigValue[]).map(item => JSON.stringify(item)) : JSON.stringify(value)} onChange={event => {
-      const decode = (text: string) => field.options!.find(option => JSON.stringify(option.value) === text)!.value;
-      change(next, field.type === 'multiselect' ? [...event.target.selectedOptions].map(option => decode(option.value)) : decode(event.target.value));
-    }}>{field.options!.map(option => <option key={JSON.stringify(option.value)} value={JSON.stringify(option.value)}>{option.label}</option>)}</select>;
-    else if (field.type === 'textarea') control = <textarea {...props} value={String(value)} onChange={event => change(next, event.target.value)}/>;
-    else control = <input {...props} type={field.type === 'password' ? 'password' : field.type === 'number' ? 'number' : 'text'} autoComplete={field.type === 'password' ? 'new-password' : undefined} value={typeof value === 'object' ? '' : String(value)} placeholder={field.type === 'password' && value && typeof value === 'object' && !Array.isArray(value) && value.set ? '已设置，留空保持不变' : undefined} min={field.min} max={field.max} onChange={event => change(next, field.type === 'number' && event.target.value !== '' ? Number(event.target.value) : event.target.value)}/>;
-    return <div className={'dshl-config-item' + (field.type === 'array' ? ' dshl-config-item-array' : '')} key={key}><label className="dshl-config-label" htmlFor={id}><span>{field.label}{field.required ? ' *' : ''}</span></label><div className="dshl-config-control">{control}{field.type === 'password' && <button type="button" onClick={() => change(next, '')}>清空</button>}<div id={`${id}-help`}>{field.description && <div className="dshl-config-help">{field.description}</div>}{error && <div className="dshl-config-error">{error}</div>}</div></div></div>;
-  })}</>;
-}
 export function ConfigCard({ view, client }: { view: ConfigView; client: ConfigClient }): React.ReactElement {
   const [base, setBase] = React.useState(view);
   const [draft, setDraft] = React.useState(view.value);
@@ -82,7 +46,7 @@ export function ConfigCard({ view, client }: { view: ConfigView; client: ConfigC
   const [error, setError] = React.useState('');
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [open, setOpen] = React.useState(false);
-  const form = React.useRef<HTMLFormElement>(null);
+  const form = React.useRef<HTMLDivElement>(null);
   const prefix = React.useId();
   React.useEffect(() => { if (!dirty && view.revision >= base.revision) { setBase(view); setDraft(view.value); } }, [view, dirty, base.revision]);
   React.useLayoutEffect(() => {
@@ -95,8 +59,8 @@ export function ConfigCard({ view, client }: { view: ConfigView; client: ConfigC
     measure();
     const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
     root.querySelectorAll('.dshl-config-label span').forEach(label => observer?.observe(label));
-    const groups = new MutationObserver(measure);
-    groups.observe(root, { subtree: true, attributes: true, attributeFilter: ['aria-hidden'] });
+    const groups = new MutationObserver(() => { root.querySelectorAll('.dshl-config-label span').forEach(label => observer?.observe(label)); measure(); });
+    groups.observe(root, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['aria-hidden'] });
     document.fonts?.addEventListener('loadingdone', measure);
     return () => { groups.disconnect(); observer?.disconnect(); document.fonts?.removeEventListener('loadingdone', measure); };
   }, [open, draft, view.template]);
@@ -106,12 +70,12 @@ export function ConfigCard({ view, client }: { view: ConfigView; client: ConfigC
     catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); if (cause instanceof ConfigError) setErrors(cause.fields); }
     finally { setBusy(false); }
   };
-  return <details className="dshl-config-card" onToggle={event => setOpen(event.currentTarget.open)}><summary>{view.template.title}</summary>{view.template.description && <p>{view.template.description}</p>}<form noValidate className="dshl-config-form" ref={form} onSubmit={save}>
+  return <details className="dshl-config-card" onToggle={event => setOpen(event.currentTarget.open)}><summary>{view.template.title}</summary>{view.template.description && <p>{view.template.description}</p>}<div className="dshl-config-form" ref={form}><form noValidate onSubmit={save}>
     <fieldset className="dshl-config-fields" disabled={busy}><Fields fields={view.template.fields} draft={draft} errors={errors} prefix={prefix} change={(path, value) => { setDraft(current => setAt(current, path, value)); setDirty(true); }}/></fieldset>
     {dirty && view.revision !== base.revision && <p role="status">配置已有更新；保存前请取消修改以加载最新值。</p>}
     {error && <p role="alert" className="dshl-config-error">{error}</p>}
     <div className="dshl-config-actions"><button type="submit" disabled={busy || !dirty}>{busy ? '保存中…' : '保存'}</button><button type="button" disabled={busy} onClick={() => { const latest = view.revision >= base.revision ? view : base; setBase(latest); setDraft(latest.value); setDirty(false); setError(''); setErrors({}); }}>取消修改</button><button type="button" disabled={busy} onClick={() => { setDraft(structuredClone(view.defaults)); setDirty(true); }}>恢复默认值</button></div>
-  </form></details>;
+  </form>{view.template.panels?.map(panel => <OperationPanel key={panel.id} pluginId={view.template.id} panel={panel} client={client} saved={base.revision > view.revision ? base.value : view.value} available={view.availableOperations}/>)}</div></details>;
 }
 export function ConfigPage({ client, ids }: { client: ConfigClient; ids?: string[] }): React.ReactElement {
   const [views, setViews] = React.useState<ConfigView[]>([]);

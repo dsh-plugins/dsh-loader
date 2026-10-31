@@ -44,6 +44,8 @@ npm install --prefix <profile-directory> <absolute-path-to-dsh-plugin-dsh-loader
 
 配置通过 `config.register(ownerCtx, template)` 声明，保存到 `<profile>/config/<插件ID>/config.json`，不依赖 `exposeAllNamespaces`。模板支持分组、嵌套对象和数组、密码、校验及声明式显隐。
 
+模板也可声明临时操作区，宿主通过 `handle.registerOperation()` 注册处理器。支持异步选项、选择回填、文档编辑/导入、只读 Markdown/列表/JSON、可取消长任务及资源 revision 冲突控制；操作草稿不写入配置文件。
+
 0.1.6-alpha.2 之前在“更多 → 设置 → 插件配置”显示聚合页；此版本起进入对应插件详情页。每个插件一个默认折叠卡片，loader 统一生成字段、等宽 label 和 fieldset 分组。保存、取消修改和恢复默认值按卡片独立操作，冲突保留草稿。
 
 - [config-api 与完整示例](docs/config-api.md)

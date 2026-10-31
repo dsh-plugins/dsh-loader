@@ -1,8 +1,8 @@
 import { mkdir, readFile, lstat, realpath, open, rename, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { ConfigError, checkJSON, defaultsFor, mapValues, validateTemplate, validateValues } from '../config.js';
-import type { ConfigAPI, ConfigHandle, ConfigSnapshot, ConfigTemplate, ConfigValues, ConfigView } from '../config.js';
+import { ConfigError, checkJSON, configOptions, defaultsFor, mapValues, operationFields, validateResource, validateTemplate, validateValues } from '../config.js';
+import type { ConfigAPI, ConfigHandle, ConfigOperationHandler, ConfigOperationRequest, ConfigOperationResult, ConfigSnapshot, ConfigTemplate, ConfigValues, ConfigView } from '../config.js';
 import { ownedScope, type ResourceOwner } from '../lifecycle.js';
 
 interface Entry {
@@ -14,6 +14,8 @@ interface Entry {
   queue: Promise<unknown>;
   watchers: Set<(snapshot: ConfigSnapshot) => void>;
   secrets: Map<string, string>;
+  handlers: Map<string, { handler: ConfigOperationHandler; calls: Set<AbortController> }>;
+  operationQueues: Map<string, Promise<unknown>>;
 }
 async function rejectLink(path: string): Promise<void> {
   try { if ((await lstat(path)).isSymbolicLink()) throw new ConfigError('unsafe-path', 'Configuration paths must not be symbolic links'); }
@@ -59,9 +61,9 @@ export class ConfigStore implements ConfigAPI {
         revision = disk.revision;
       } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
       if (scope.disposed || this.closed) throw new ConfigError('disposed', 'Plugin unloaded while loading configuration');
-      const entry: Entry = { template, value, revision, file, active: true, queue: Promise.resolve(), watchers: new Set(), secrets: new Map() };
+      const entry: Entry = { template, value, revision, file, active: true, queue: Promise.resolve(), watchers: new Set(), secrets: new Map(), handlers: new Map(), operationQueues: new Map() };
       this.entries.set(template.id, entry);
-      scope.add(() => { entry.active = false; entry.watchers.clear(); if (this.entries.get(template.id) === entry) this.entries.delete(template.id); this.emit(); });
+      scope.add(() => { this.closeEntry(entry); if (this.entries.get(template.id) === entry) this.entries.delete(template.id); this.emit(); });
       this.emit();
       const get = (): ConfigSnapshot<T> => {
         if (!entry.active) throw new ConfigError('disposed', 'Configuration handle disposed');
@@ -72,10 +74,73 @@ export class ConfigStore implements ConfigAPI {
         update: async (patch, expectedRevision) => { await this.commit(entry, patch as ConfigValues, expectedRevision); return get(); },
         reset: async expectedRevision => { await this.commit(entry, defaultsFor(template.fields), expectedRevision, true); return get(); },
         watch: listener => { get(); const callback = listener as (snapshot: ConfigSnapshot) => void; entry.watchers.add(callback); return scope.add(() => { entry.watchers.delete(callback); }); },
+        registerOperation: (id, handler) => {
+          get();
+          if (!template.panels?.some(panel => panel.operations.some(operation => operation.id === id))) throw new ConfigError('not-found', `Operation is not declared: ${id}`);
+          if (typeof handler !== 'function' || entry.handlers.has(id)) throw new ConfigError('duplicate', `Invalid or duplicate handler: ${id}`);
+          const registration = { handler: handler as ConfigOperationHandler, calls: new Set<AbortController>() };
+          entry.handlers.set(id, registration); this.emit();
+          return scope.add(() => {
+            for (const call of registration.calls) call.abort(); registration.calls.clear();
+            if (entry.handlers.get(id) === registration) entry.handlers.delete(id);
+            this.emit();
+          });
+        },
         dispose: scope.dispose,
       };
     } catch (error) { scope.dispose(); throw error; }
     finally { this.loading.delete(template.id); }
+  }
+  private closeEntry(entry: Entry): void {
+    entry.active = false; entry.watchers.clear();
+    for (const registration of entry.handlers.values()) for (const call of registration.calls) call.abort();
+    entry.handlers.clear();
+  }
+  /** No deadline: callers/owners cancel through AbortSignal, including long model downloads. */
+  async invoke(id: string, operationId: string, request: ConfigOperationRequest, signal?: AbortSignal): Promise<ConfigOperationResult> {
+    const entry = this.entry(id);
+    const panel = entry.template.panels?.find(panel => panel.operations.some(operation => operation.id === operationId));
+    const operation = panel?.operations.find(operation => operation.id === operationId);
+    const registration = entry.handlers.get(operationId);
+    if (!panel || !operation || !registration) throw new ConfigError('not-found', `Operation is not registered: ${operationId}`);
+    checkJSON(request);
+    if (!request || typeof request !== 'object' || !request.input || typeof request.input !== 'object' || Array.isArray(request.input)) throw new ConfigError('invalid', 'Operation input is required');
+    if (operation.requiresRevision && !request.resource) throw new ConfigError('revision-required', '请先加载资源以获取 revision');
+    if (request.resource !== undefined) validateResource(request.resource);
+    const resource = request.resource ? structuredClone(request.resource) : undefined;
+    const input = validateValues(operationFields(panel.fields, operation.input), request.input);
+    // Async list IDs are resolved by the plugin; saved-config options are checked here.
+    mapValues(operationFields(panel.fields, operation.input), input, (field, value, path) => {
+      if (field.optionsFrom?.config) {
+        const allowed = configOptions(field, entry.value).map(option => option.value);
+        if ((field.type === 'multiselect' ? value as unknown[] : value === '' && !field.required ? [] : [value]).some(item => !allowed.includes(item as string | number))) throw new ConfigError('validation', '已保存配置中的选项已变化', { [path.join('.')]: '无效选项' });
+      }
+      return value;
+    });
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true });
+    registration.calls.add(controller);
+    let cancel: () => void = () => {};
+    const cancelled = new Promise<never>((_, reject) => { cancel = () => reject(new ConfigError('cancelled', '操作已取消或插件已卸载')); controller.signal.addEventListener('abort', cancel, { once: true }); });
+    const run = async () => {
+      if (controller.signal.aborted || !entry.active || entry.handlers.get(operationId) !== registration) throw new ConfigError('cancelled', '操作已取消或插件已卸载');
+      const result = await registration.handler({ input: structuredClone(input), ...(resource ? { resource } : {}), config: { value: structuredClone(entry.value), revision: entry.revision }, signal: controller.signal });
+      if (controller.signal.aborted || !entry.active) throw new ConfigError('cancelled', '操作已取消或插件已卸载');
+      checkJSON(result);
+      if (!result || typeof result !== 'object' || result.value === undefined) throw new ConfigError('invalid-result', 'Operation must return { value }');
+      if (result.resource != null) validateResource(result.resource);
+      return structuredClone(result);
+    };
+    // Save/delete of one resource serialize together; unrelated downloads/editors can proceed.
+    const key = operation.requiresRevision ? `resource:${resource!.id}` : `operation:${operationId}`;
+    const task = operation.readOnly ? run() : (entry.operationQueues.get(key) ?? Promise.resolve()).then(run);
+    if (!operation.readOnly) {
+      const settled = task.catch(() => {}).finally(() => { if (entry.operationQueues.get(key) === settled) entry.operationQueues.delete(key); });
+      entry.operationQueues.set(key, settled);
+    }
+    try { if (controller.signal.aborted) cancel(); return await Promise.race([task, cancelled]); }
+    finally { signal?.removeEventListener('abort', abort); controller.signal.removeEventListener('abort', cancel); registration.calls.delete(controller); }
   }
   private commit(entry: Entry, patch: ConfigValues, expectedRevision?: number, replace = false): Promise<void> {
     checkJSON(patch);
@@ -121,7 +186,7 @@ export class ConfigStore implements ConfigAPI {
       if (field.fields) strip(field.fields); if (field.item) strip([field.item]);
     } };
     strip(template.fields);
-    return { template, value: this.redact(entry, entry.value), defaults: this.redact(entry, defaultsFor(entry.template.fields)), revision: entry.revision };
+    return { template, value: this.redact(entry, entry.value), defaults: this.redact(entry, defaultsFor(entry.template.fields)), revision: entry.revision, availableOperations: [...entry.handlers.keys()] };
   }
   list(): ConfigView[] { return [...this.entries.keys()].map(id => this.read(id)); }
   async write(id: string, value: ConfigValues, expectedRevision: number): Promise<ConfigView> {
@@ -146,7 +211,7 @@ export class ConfigStore implements ConfigAPI {
   }
   dispose(): void {
     this.closed = true;
-    for (const entry of this.entries.values()) { entry.active = false; entry.watchers.clear(); }
+    for (const entry of this.entries.values()) this.closeEntry(entry);
     this.entries.clear(); this.emit(); this.listeners.clear();
   }
 }

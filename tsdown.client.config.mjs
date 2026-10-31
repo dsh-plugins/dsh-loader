@@ -49,6 +49,9 @@ export default {
   // entry even though this bundle runs in the browser. Keep browser conditional
   // exports authoritative for both source import() and generated require().
   inputOptions: {
+    // tsdown selects Node for CJS output unless the underlying input also overrides it.
+    // vfile's #imports must select their browser implementation.
+    platform: 'browser',
     resolve: {
       conditionNames: ['browser', 'import', 'require', 'default'],
     },

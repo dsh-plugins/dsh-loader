@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -18,7 +18,7 @@ const packageDir = join(temp, 'node_modules/@dsh-plugin/dsh-loader');
 mkdirSync(packageDir, { recursive: true });
 run('tar', ['-xf', join(temp, packed.filename), '-C', packageDir, '--strip-components=1']);
 assert.equal(JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8')).version, '2.0.0');
-for (const file of ['README.zh_CN.md', 'docs/config-api.md', 'docs/support.md', 'examples/config-plugin/index.mjs']) {
+for (const file of ['README.zh_CN.md', 'docs/config-api.md', 'docs/support.md', 'examples/config-plugin/index.mjs', 'examples/config-plugin/operations.mjs']) {
   assert(packed.files.some(entry => entry.path === file), `Missing packed documentation: ${file}`);
 }
 const link = (name) => {
@@ -46,6 +46,8 @@ interface Example { title: string }
 declare const api: HostAPI, ctx: CordisContext;
 const group: ConfigField = { type: 'group', label: 'Group', collapsible: true, defaultCollapsed: true, fields: [{ type: 'text', key: 'title', label: 'Title' }] };
 const handle: Promise<ConfigHandle<Example>> = api.config.register<Example>(ctx, defineConfig({ id: 'example', packageName: '@example/plugin', title: 'Example', fields: [group] }));
+handle.then(config => config.registerOperation('preview', ({ input, resource, config: saved, signal }) => ({ value: { text: String(input.text), revision: saved.revision, aborted: signal.aborted }, ...(resource ? { resource } : {}) })));
+defineConfig({ id: 'editor', packageName: '@example/editor', title: 'Editor', fields: [], panels: [{ id: 'documents', title: 'Documents', fields: [{ type: 'textarea', key: 'text', label: 'Text' }], operations: [{ id: 'preview', input: ['text'], readOnly: true, button: { label: 'Preview' }, result: [{ type: 'markdown' }] }] }] });
 `);
 writeFileSync(join(temp, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true, noEmit: true, skipLibCheck: false, module: 'NodeNext', moduleResolution: 'NodeNext', target: 'ES2023', jsx: 'react-jsx', types: ['node', 'react'] }, files: ['consumer.mts'] }));
 const typescriptPackage = require.resolve('typescript/package.json');
@@ -89,5 +91,16 @@ try { run(process.execPath, ['runtime.mjs'], { env: { ...process.env, DSHLOADER_
 catch (error) { rejected = /no adapter covers/.test(String(error.stderr)); }
 assert(rejected, 'Unknown patch must reject stable imports');
 const browser = readFileSync(join(packageDir, 'lib/client.js'), 'utf8');
-assert(!/from\s*['"]node:|require\(['"]node:/.test(browser), 'Browser bundle imports Node modules');
+const bundlerRequire = createRequire(require.resolve('tsdown'));
+const { parseAst } = await import(pathToFileURL(bundlerRequire.resolve('rolldown/parseAst')).href);
+const browserImports = [];
+const visit = node => {
+  if (!node || typeof node !== 'object') return;
+  const specifier = ['ImportDeclaration', 'ImportExpression', 'ExportNamedDeclaration', 'ExportAllDeclaration'].includes(node.type) ? node.source
+    : node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'require' ? node.arguments[0] : undefined;
+  if (typeof specifier?.value === 'string') browserImports.push(specifier.value);
+  for (const value of Object.values(node)) if (Array.isArray(value)) value.forEach(visit); else if (value && typeof value === 'object') visit(value);
+};
+visit(parseAst(browser));
+assert(!browserImports.some(name => name.startsWith('node:')), 'Browser bundle imports Node modules');
 console.log(`Packed ESM/CJS imports, unsupported-version rejection and browser separation passed (${packed.files.length} files).\nArchive: ${join(temp, packed.filename)}`);
