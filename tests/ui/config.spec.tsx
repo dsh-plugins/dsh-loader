@@ -61,6 +61,28 @@ it('routes old versions to settings and new versions to keyed plugin slots, with
   expect(rows[0]).toMatchObject({ name: 'plugins.bundle.config', key: '@example/plugin' }); next();
 });
 
+it('places plugin-page save actions before long forms while settings cards keep their existing order', async () => {
+  for (const version of ['0.1.5-rc.3', '0.1.6-alpha.2', '0.2.2-alpha.2']) {
+    const api = client();
+    let Component!: React.ComponentType;
+    const slots = { inject: (_name: string, callback: () => unknown) => { callback(); return () => {}; }, register: (_options: unknown, component: React.ComponentType) => { Component = component; } };
+    const off = installConfigUI({ get: () => slots }, api, createBootDescriptor(version, 'dsh-' + version.split('-')[0]));
+    await act(async () => {});
+    const container = document.createElement('div'); document.body.append(container); root = createRoot(container);
+    await act(async () => root!.render(<Component/>));
+    const form = container.querySelector('form')!;
+    const save = form.querySelector<HTMLButtonElement>('button[type=submit]')!;
+    const fields = form.querySelector('fieldset')!;
+    expect(Boolean(save.compareDocumentPosition(fields) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(version !== '0.1.5-rc.3');
+    expect(save.disabled).toBe(true);
+    click(container, '恢复默认值'); expect(save.disabled).toBe(false);
+    await act(async () => form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    expect(api.update).toHaveBeenCalledWith('example', view.defaults, 1);
+    expect(save.disabled).toBe(true);
+    act(() => root!.unmount()); root = undefined; container.remove(); off();
+  }
+});
+
 it('keeps cards independent and preserves a dirty draft across external revisions', async () => {
   const api = client(); const second = { ...view, template: { ...view.template, id: 'second', title: 'Second' } };
   const container = document.createElement('div'); document.body.append(container); root = createRoot(container);

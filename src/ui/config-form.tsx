@@ -7,6 +7,13 @@ import { OperationPanel } from './config-operations.js';
 import type { ConfigDialogsAPI } from './config-dialogs.js';
 import { ConfigModelsContext } from './model-select.js';
 import type { ConfigModelSource } from './config-model-source.js';
+import { ConfigToast } from './config-toast.js';
+
+interface ConfigSaveAction { dirty: boolean; save(): Promise<boolean> }
+type ConfigSaveRegistration = (id: string, current: () => ConfigSaveAction) => () => void;
+function saveShortcut(event: KeyboardEvent): boolean {
+  return event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey && !event.isComposing && event.key.toLowerCase() === 's';
+}
 
 export const CONFIG_CSS = `
 .dshl-config{color:var(--color-text-primary,inherit);font:inherit;width:100%;box-sizing:border-box}
@@ -33,6 +40,9 @@ export const CONFIG_CSS = `
 @media(prefers-reduced-motion:reduce){.dshl-config-group[data-collapsible],.dshl-config-group[data-collapsible]>.dshl-config-group-body,.dshl-config-group-triangle{transition:none}}
 .dshl-config-help{font-size:12px;opacity:.7;margin-top:4px}.dshl-config-error{color:var(--color-danger,#d33);font-size:13px;overflow-wrap:anywhere}
 .dshl-config-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}.dshl-config button{font:inherit;color:inherit;background:transparent;border:1px solid var(--color-border,#8888);border-radius:6px;padding:6px 12px;cursor:pointer}.dshl-config button:disabled{opacity:.5;cursor:default}
+.dshl-config-card[data-layout=plugins] .dshl-config-save{position:sticky;top:var(--plugin-header-scroll-padding,0px);z-index:2;margin-top:0;margin-bottom:12px;padding:8px 0;border-bottom:1px solid var(--dsw-alias-border-l2,#8886);background:var(--dsw-alias-bg-base,Canvas);align-items:center}
+.dshl-config-card[data-layout=plugins] .dshl-config-save>button[type=submit]{background:var(--dsw-alias-button-primary-fill,Highlight);color:var(--dsw-alias-button-primary-foreground,HighlightText);border-color:transparent}
+.dshl-config-save-feedback{flex-basis:100%;font-size:12px}.dshl-config-save-feedback:empty{display:none}.dshl-config-save-feedback p{margin:0}
 .dshl-config-item-array>.dshl-config-control{grid-column:1 / -1}
 .dshl-config-array{min-width:0}.dshl-config-array>section{border-left:2px solid #8885;padding-left:8px;margin:8px 0}
 .dshl-config-panel{border-top:1px solid var(--color-border,#8886);margin-top:24px;padding-top:8px;min-width:0}
@@ -41,7 +51,7 @@ export const CONFIG_CSS = `
 .dshl-config-result img{max-width:100%}.dshl-config-json{border:1px solid var(--color-border,#8886);border-radius:8px;padding:8px}
 @media(max-width:480px){.dshl-config-card{padding:8px}.dshl-config-item{gap:8px}.dshl-config-group{padding-left:8px;padding-right:8px}.dshl-config-control input,.dshl-config-control select{min-width:0}}
 `;
-export function ConfigCard({ view, client, dialogs }: { view: ConfigView; client: ConfigClient; dialogs?: ConfigDialogsAPI }): React.ReactElement {
+export function ConfigCard({ view, client, dialogs, layout = 'settings', registerSave, onSaved }: { view: ConfigView; client: ConfigClient; dialogs?: ConfigDialogsAPI; layout?: BootDescriptor['capabilities']['configUI']; registerSave?: ConfigSaveRegistration; onSaved?(): void }): React.ReactElement {
   const [base, setBase] = React.useState(view);
   const [draft, setDraft] = React.useState(view.value);
   const [dirty, setDirty] = React.useState(false);
@@ -51,6 +61,7 @@ export function ConfigCard({ view, client, dialogs }: { view: ConfigView; client
   const [open, setOpen] = React.useState(false);
   const form = React.useRef<HTMLDivElement>(null);
   const prefix = React.useId();
+  const pendingSave = React.useRef<Promise<boolean>>();
   const [, refreshDialogs] = React.useReducer(value => value + 1, 0);
   React.useEffect(() => dialogs?.subscribe(refreshDialogs), [dialogs]);
   React.useEffect(() => { if (!dirty && view.revision >= base.revision) { setBase(view); setDraft(view.value); } }, [view, dirty, base.revision]);
@@ -69,29 +80,88 @@ export function ConfigCard({ view, client, dialogs }: { view: ConfigView; client
     document.fonts?.addEventListener('loadingdone', measure);
     return () => { groups.disconnect(); observer?.disconnect(); document.fonts?.removeEventListener('loadingdone', measure); };
   }, [open, draft, view.template]);
-  const save = async (event: React.FormEvent) => {
-    event.preventDefault(); setBusy(true); setError(''); setErrors({});
-    try { const saved = await client.update(view.template.id, draft, base.revision); setBase(saved); setDraft(saved.value); setDirty(false); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); if (cause instanceof ConfigError) setErrors(cause.fields); }
-    finally { setBusy(false); }
+  const save = (): Promise<boolean> => {
+    if (pendingSave.current) { return pendingSave.current; }
+    setBusy(true); setError(''); setErrors({});
+    const pending = Promise.resolve().then(async () => {
+      try { const saved = await client.update(view.template.id, draft, base.revision); currentSave.current.dirty = false; setBase(saved); setDraft(saved.value); setDirty(false); return true; }
+      catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); if (cause instanceof ConfigError) { setErrors(cause.fields); } return false; }
+      finally { pendingSave.current = undefined; setBusy(false); }
+    });
+    pendingSave.current = pending;
+    return pending;
   };
-  return <details className="dshl-config-card" onToggle={event => setOpen(event.currentTarget.open)}><summary>{view.template.title}</summary>{view.template.description && <p>{view.template.description}</p>}<div className="dshl-config-form" ref={form}><form noValidate onSubmit={save}>
-    <fieldset className="dshl-config-fields" disabled={busy}><Fields disabled={busy} dialog={(field, path, id) => <button type="button" id={id} disabled={!dialogs?.hasDialog(view.template.id, field.dialog!.id, path)} onClick={() => { void dialogs!.openDialog(view.template.id, field.dialog!.id, path).catch(cause => setError(cause instanceof Error ? cause.message : String(cause))); }}>{field.dialog!.label ?? '打开配置弹窗'}</button>} fields={view.template.fields} draft={draft} errors={errors} prefix={prefix} change={(path, value) => { setDraft(current => setAt(current, path, value)); setDirty(true); }}/></fieldset>
+  const currentSave = React.useRef<ConfigSaveAction>({ dirty, save }); currentSave.current = { dirty, save };
+  React.useLayoutEffect(() => registerSave?.(view.template.id, () => currentSave.current), [registerSave, view.template.id]);
+  const feedback = <>
     {dirty && view.revision !== base.revision && <p role="status">配置已有更新；保存前请取消修改以加载最新值。</p>}
     {error && <p role="alert" className="dshl-config-error">{error}</p>}
-    <div className="dshl-config-actions"><button type="submit" disabled={busy || !dirty}>{busy ? '保存中…' : '保存'}</button><button type="button" disabled={busy} onClick={() => { const latest = view.revision >= base.revision ? view : base; setBase(latest); setDraft(latest.value); setDirty(false); setError(''); setErrors({}); }}>取消修改</button><button type="button" disabled={busy} onClick={() => { setDraft(structuredClone(view.defaults)); setDirty(true); }}>恢复默认值</button></div>
+  </>;
+  const actions = <div className="dshl-config-actions dshl-config-save"><button type="submit" title="Ctrl+S 保存本页全部已修改配置" disabled={busy || !dirty}>{busy ? '保存中…' : '保存'}</button><button type="button" disabled={busy} onClick={() => { const latest = view.revision >= base.revision ? view : base; setBase(latest); setDraft(latest.value); setDirty(false); setError(''); setErrors({}); }}>取消修改</button><button type="button" disabled={busy} onClick={() => { setDraft(structuredClone(view.defaults)); setDirty(true); }}>恢复默认值</button>{layout === 'plugins' && <div className="dshl-config-save-feedback">{feedback}{dirty && !error && view.revision === base.revision && <span role="status">有未保存的修改</span>}</div>}</div>;
+  return <details className="dshl-config-card" data-layout={layout} onToggle={event => setOpen(event.currentTarget.open)}><summary>{view.template.title}</summary>{view.template.description && <p>{view.template.description}</p>}<div className="dshl-config-form" ref={form}><form noValidate onSubmit={event => { event.preventDefault(); void save().then(success => { if (success) { onSaved?.(); } }); }}>
+    {layout === 'plugins' && actions}
+    <fieldset className="dshl-config-fields" disabled={busy}><Fields disabled={busy} dialog={(field, path, id) => <button type="button" id={id} disabled={!dialogs?.hasDialog(view.template.id, field.dialog!.id, path)} onClick={() => { void dialogs!.openDialog(view.template.id, field.dialog!.id, path).catch(cause => setError(cause instanceof Error ? cause.message : String(cause))); }}>{field.dialog!.label ?? '打开配置弹窗'}</button>} fields={view.template.fields} draft={draft} errors={errors} prefix={prefix} change={(path, value) => { setDraft(current => setAt(current, path, value)); setDirty(true); }}/></fieldset>
+    {layout === 'settings' && <>{feedback}{actions}</>}
   </form>{view.template.panels?.map(panel => <OperationPanel key={panel.id} pluginId={view.template.id} panel={panel} client={client} saved={base.revision > view.revision ? base.value : view.value} available={view.availableOperations}/>)}</div></details>;
 }
-export function ConfigPage({ client, ids, dialogs, loadModels }: { client: ConfigClient; ids?: string[]; dialogs?: ConfigDialogsAPI; loadModels?: ConfigModelSource }): React.ReactElement {
+export function ConfigPage({ client, ids, dialogs, loadModels, layout = 'settings' }: { client: ConfigClient; ids?: string[]; dialogs?: ConfigDialogsAPI; loadModels?: ConfigModelSource; layout?: BootDescriptor['capabilities']['configUI'] }): React.ReactElement {
   const [views, setViews] = React.useState<ConfigView[]>([]);
   const [error, setError] = React.useState('');
+  const [notice, setNotice] = React.useState<{ id: number; text: string; success: boolean }>();
+  const notices = React.useRef(0), saves = React.useRef(new Map<string, () => ConfigSaveAction>());
+  const savingAll = React.useRef<Promise<void>>();
+  const saveQueued = React.useRef(false);
+  const shortcutHeld = React.useRef(false);
+  const notify = React.useCallback((text: string, success: boolean) => setNotice({ id: ++notices.current, text, success }), []);
+  const registerSave = React.useCallback<ConfigSaveRegistration>((id, current) => {
+    saves.current.set(id, current);
+    return () => { if (saves.current.get(id) === current) { saves.current.delete(id); } };
+  }, []);
+  const onSaved = React.useCallback(() => { if (!savingAll.current) { notify('配置已保存', true); } }, [notify]);
+  const changedCards = () => [...saves.current].map(([id, current]) => ({ id, action: current() })).filter(entry => entry.action.dirty);
+  const saveAll = () => {
+    if (savingAll.current) { saveQueued.current = true; return; }
+    const changed = changedCards();
+    if (!changed.length) { notify('没有未保存的配置修改', true); return; }
+    setNotice(undefined); saveQueued.current = false;
+    savingAll.current = Promise.resolve().then(async () => {
+      const outcomes = new Map<string, boolean>();
+      let batch = changed;
+      while (batch.length) {
+        const results = await Promise.allSettled(batch.map(entry => entry.action.save()));
+        results.forEach((result, index) => outcomes.set(batch[index].id, result.status === 'fulfilled' && result.value));
+        if (!saveQueued.current) { break; }
+        saveQueued.current = false; batch = changedCards();
+      }
+      const saved = [...outcomes.values()].filter(Boolean).length, failed = outcomes.size - saved;
+      const text = failed ? `已保存 ${saved} 项配置，${failed} 项保存失败，请检查错误提示`
+        : changedCards().length ? `本次已保存 ${saved} 项配置，仍有新的修改未保存` : `已保存全部 ${saved} 项配置`;
+      notify(text, failed === 0);
+    }).finally(() => { savingAll.current = undefined; saveQueued.current = false; });
+  };
+  const keydown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.defaultPrevented || !saveShortcut(event.nativeEvent) || !(event.target instanceof Element)
+      || !event.target.closest('input,textarea,select,[contenteditable=""],[contenteditable="true"],[contenteditable="plaintext-only"]')) { return; }
+    event.preventDefault(); event.stopPropagation(); shortcutHeld.current = true; saveAll();
+  };
+  React.useEffect(() => {
+    const repeat = (event: KeyboardEvent) => {
+      if (event.repeat && shortcutHeld.current && saveShortcut(event)) { event.preventDefault(); event.stopPropagation(); }
+    };
+    const release = () => { shortcutHeld.current = false; };
+    const keyup = (event: KeyboardEvent) => { if (event.key.toLowerCase() === 's' || event.key === 'Control') { release(); } };
+    document.addEventListener('keydown', repeat, true);
+    document.addEventListener('keyup', keyup, true);
+    window.addEventListener('blur', release);
+    return () => { release(); document.removeEventListener('keydown', repeat, true); document.removeEventListener('keyup', keyup, true); window.removeEventListener('blur', release); };
+  }, []);
   React.useEffect(() => {
     let active = true, generation = 0;
     const refresh = () => { const current = ++generation; void client.list().then(value => { if (active && current === generation) { setViews(value); setError(''); } }, cause => { if (active && current === generation) setError(String(cause)); }); };
     const off = client.subscribe(refresh); refresh();
     return () => { active = false; off(); };
   }, [client]);
-  return <ConfigModelsContext.Provider value={loadModels}><div className="dshl-config"><style>{CONFIG_CSS}</style>{error && <p role="alert">{error}</p>}{views.filter(view => !ids || ids.includes(view.template.id)).map(view => <ConfigCard key={view.template.id} view={view} client={client} dialogs={dialogs}/>)}{!views.length && !error && <p>暂无已注册的插件配置。</p>}</div></ConfigModelsContext.Provider>;
+  return <ConfigModelsContext.Provider value={loadModels}><div className="dshl-config" aria-keyshortcuts="Control+S" onKeyDownCapture={keydown}><style data-plugin="@dsh-plugin/dsh-loader" data-plugin-css="@dsh-plugin/dsh-loader/ui/config.css">{CONFIG_CSS}</style>{error && <p role="alert">{error}</p>}{views.filter(view => !ids || ids.includes(view.template.id)).map(view => <ConfigCard key={view.template.id} view={view} client={client} dialogs={dialogs} layout={layout} registerSave={registerSave} onSaved={onSaved}/>)}{!views.length && !error && <p>暂无已注册的插件配置。</p>}{notice && <ConfigToast key={notice.id} text={notice.text} success={notice.success} onDone={() => setNotice(current => current?.id === notice.id ? undefined : current)}/>}</div></ConfigModelsContext.Provider>;
 }
 /** All slot registration is loader-owned; plugins supply only templates. */
 export function installConfigUI(ctx: any, client: ConfigClient, boot: BootDescriptor, dialogs?: ConfigDialogsAPI, loadModels?: ConfigModelSource): () => void {
@@ -101,7 +171,7 @@ export function installConfigUI(ctx: any, client: ConfigClient, boot: BootDescri
   const slots = ctx.get?.('slots');
   if (!slots) return () => {};
   const add = (name: string, id: string, ids?: string[]) => {
-    const off = slots.inject(name, () => slots.register({ name, id: `dshloader:${id}`, ...(name !== 'settings.section' ? { key: id } : {}), label: () => '插件配置', order: 40, inject: () => ({}) }, () => <ConfigPage client={client} ids={ids} dialogs={dialogs} loadModels={loadModels}/>));
+    const off = slots.inject(name, () => slots.register({ name, id: `dshloader:${id}`, ...(name !== 'settings.section' ? { key: id } : {}), label: () => '插件配置', order: 40, inject: () => ({}) }, () => <ConfigPage client={client} ids={ids} dialogs={dialogs} loadModels={loadModels} layout={boot.capabilities.configUI}/>));
     registrations.set(id, typeof off === 'function' ? off : () => {});
   };
   const sync = async () => {

@@ -22,6 +22,7 @@ template.fields.push({ type: 'object', key: 'document', label: '文档配置', d
 template.panels = [structuredClone(operationsPanel)];
 template.panels[0].operations.push({ id: 'test.external', input: ['documentId'], button: { label: '模拟其他页面修改' } });
 const handle = await store.register({ effect(fn) { releases.push(fn()); } }, template);
+await store.register({ effect(fn) { releases.push(fn()); } }, { id: 'config-secondary', packageName: template.packageName, title: '第二组配置', fields: [{ type: 'text', key: 'note', label: '备注', default: '未修改' }] });
 const { documents } = registerExampleOperations(handle, ConfigError);
 handle.registerOperation('test.external', ({ input }) => { const document = documents.get(input.documentId); if (document) document.revision++; return { value: '外部修订已增加' }; });
 const route = [];

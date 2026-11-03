@@ -13,6 +13,8 @@ export default defineConfig({
     include: ['tests/ui/**/*.spec.tsx', 'tests/ui/**/*.spec.ts'],
     setupFiles: ['tests/ui/setup.ts'],
     restoreMocks: true,
+    // 宿主原语包含 CSS 模块，需要由 Vite 转换后在 jsdom 中渲染。
+    server: { deps: { inline: ['@deepseek-ai/dsh-client-ui-primitives'] } },
   },
   esbuild: {
     jsx: 'automatic',
