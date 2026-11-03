@@ -7,7 +7,7 @@ export async function preloadRegistryModules(importModule: (specifier: string) =
       return undefined;
     }
   };
-  const [sandbox, permissionPresets, settings, llm, tools, timeout, credentials, subagent, compaction, agent] =
+  const [sandbox, permissionPresets, settings, llm, tools, timeout, credentials, subagent, compaction, agent, agentInstructions] =
     await Promise.all([
       load('@deepseek-ai/dsh-sandbox'),
       load('@deepseek-ai/dsh-permission-presets'),
@@ -19,6 +19,7 @@ export async function preloadRegistryModules(importModule: (specifier: string) =
       load('@deepseek-ai/dsh-subagent'),
       load('@deepseek-ai/dsh-compaction-basic'),
       load('@deepseek-ai/dsh-agent'),
+      load('@deepseek-ai/dsh-agent-instructions'),
     ]);
   return {
     agent,
@@ -31,5 +32,6 @@ export async function preloadRegistryModules(importModule: (specifier: string) =
     credentials: credentials as RegistryModules['credentials'],
     subagent: subagent as RegistryModules['subagent'],
     compaction: compaction as RegistryModules['compaction'],
+    agentInstructions: agentInstructions as RegistryModules['agentInstructions'],
   };
 }

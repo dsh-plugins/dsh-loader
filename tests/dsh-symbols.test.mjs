@@ -25,6 +25,7 @@ function fullModules() {
     subagent: { delegationDepthOf: () => 3 },
     compaction: { BasicCompactionEngine: FakeEngine },
     llm: { BlockAssembler: FakeAssembler },
+    agentInstructions: { renderAgentInstructions: (files, options) => ({ text: files.map(file => file.content).join('\n'), files, options }) },
   };
 }
 
@@ -40,6 +41,12 @@ test('forwards every symbol to the resolved module', () => {
   assert.equal(dsh.subagent.delegationDepthOf({}), 3);
   assert.equal(dsh.compaction.BasicCompactionEngine, modules.compaction.BasicCompactionEngine);
   assert.equal(dsh.llm.BlockAssembler, modules.llm.BlockAssembler);
+  const files = [{ absolutePath: '/example/AGENTS.md', displayPath: 'AGENTS.md', content: '项目规则' }];
+  const options = { maxBytes: 65536 };
+  const rendered = dsh.agentInstructions.renderAgentInstructions(files, options);
+  assert.equal(rendered.files, files);
+  assert.equal(rendered.options, options);
+  assert.equal(rendered.text, '项目规则');
 });
 
 test('the compaction base class is usable as a superclass', () => {
@@ -50,6 +57,19 @@ test('the compaction base class is usable as a superclass', () => {
     }
   }
   assert.equal(new Sub().summarize(), 'ok');
+});
+
+test('旧宿主使用同一公开渲染器的 renderWorkspaceContext 名称', () => {
+  const files = [{ absolutePath: '/example/SOUL.md', displayPath: 'SOUL.md', content: '人设规则' }];
+  const options = { maxBytes: 65536 };
+  const dsh = createDshSymbolsAPI({ modules: { agentInstructions: {
+    renderWorkspaceContext(input, settings) {
+      assert.equal(input, files);
+      assert.equal(settings, options);
+      return { text: '宿主渲染结果' };
+    },
+  } } });
+  assert.equal(dsh.agentInstructions.renderAgentInstructions(files, options).text, '宿主渲染结果');
 });
 
 test('MAX_TIMER_DELAY_MS falls back to the Node ceiling when dsh-timeout is absent', () => {
@@ -68,6 +88,7 @@ test('every other missing symbol throws loudly and names its package', () => {
     [() => dsh.subagent.delegationDepthOf({}), /@deepseek-ai\/dsh-subagent/],
     [() => dsh.compaction.BasicCompactionEngine, /@deepseek-ai\/dsh-compaction-basic/],
     [() => dsh.llm.BlockAssembler, /@deepseek-ai\/dsh-llm/],
+    [() => dsh.agentInstructions.renderAgentInstructions([], { maxBytes: 65536 }), /@deepseek-ai\/dsh-agent-instructions/],
   ];
   for (const [call, pkg] of cases) {
     assert.throws(call, (error) => {

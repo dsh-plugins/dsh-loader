@@ -33,6 +33,7 @@ export interface DshSymbolModules {
   subagent?: { delegationDepthOf?: unknown };
   compaction?: { BasicCompactionEngine?: unknown };
   llm?: { BlockAssembler?: unknown };
+  agentInstructions?: { renderAgentInstructions?: unknown; renderWorkspaceContext?: unknown };
 }
 
 /**
@@ -43,6 +44,10 @@ export interface DshSymbolModules {
  * `src/types.ts` explains for the service surfaces.
  */
 export interface DshSymbolsAPI {
+  agentInstructions: {
+    /** 使用宿主规则文件渲染器，保留来源路径、优先级说明与字节预算。 */
+    renderAgentInstructions(files: { absolutePath: string; displayPath: string; content: string }[], options: { maxBytes: number }): { text: string };
+  };
   tools: {
     /** `defineTool(definition)` — build a tool definition dsh's registry accepts. */
     defineTool<T>(definition: T): T;
@@ -92,6 +97,16 @@ function required<T>(value: unknown, pkg: string, symbol: string): T {
 export function createDshSymbolsAPI(opts: { modules?: DshSymbolModules }): DshSymbolsAPI {
   const m = opts.modules ?? {};
   return {
+    agentInstructions: {
+      renderAgentInstructions(files, options) {
+        const render = required<(files: unknown[], options: { maxBytes: number }) => { text: string }>(
+          m.agentInstructions?.renderAgentInstructions ?? m.agentInstructions?.renderWorkspaceContext,
+          '@deepseek-ai/dsh-agent-instructions',
+          'agentInstructions.renderAgentInstructions',
+        );
+        return render(files, options);
+      },
+    },
     tools: {
       defineTool(definition) {
         const fn = required<(d: unknown) => unknown>(

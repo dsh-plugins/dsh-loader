@@ -85,6 +85,8 @@ export interface RegistryModules {
   subagent?: { delegationDepthOf?: unknown };
   /** `@deepseek-ai/dsh-compaction-basic` — the `BasicCompactionEngine` base class. */
   compaction?: { BasicCompactionEngine?: unknown };
+  /** 宿主 AGENTS.md 规则上下文渲染器。 */
+  agentInstructions?: { renderAgentInstructions?: unknown; renderWorkspaceContext?: unknown };
 }
 
 /**

@@ -29,6 +29,8 @@ export function apply(ctx: CordisContext) {
 
 确切签名见随包发布的 `dist/types.d.ts` 与 `dist/adapters/shared/*.d.ts`。适配器在宿主启动时选定，插件不要自行检测版本来复制上游私有逻辑。
 
+`dsh.agentInstructions.renderAgentInstructions(files, { maxBytes })` 使用宿主的 AGENTS.md 渲染器，把 `{ absolutePath, displayPath, content }` 文件列表转换为带来源路径、优先级说明与字节预算的规则上下文。插件可将返回的 `text` 作为用户角色的补充规则消息注入；不要覆盖标准预设的人设系统提示词，也不要冒用宿主 `agent-instructions` 消息来源来干扰其规则文件状态。
+
 ## 稳定子路径
 
 宿主 `tools`、`llm`、`agent`、`settings`、`timeout`、`subagent`、`credentials`、`compaction-basic` 同时提供 ESM/CJS 导出。模块在已选定运行时解析，调用缺失符号会明确报错；多套不同版本同时运行时请通过 owner 的 `HostAPI`，避免全局静态导入歧义。
