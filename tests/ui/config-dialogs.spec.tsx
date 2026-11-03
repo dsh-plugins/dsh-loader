@@ -11,6 +11,7 @@ vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({ Menu: () => null }));
 import { createUi } from '../../src/ui/index.js';
 let dialogs: ConfigDialogsAPI, root: Root | undefined;
 beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: vi.fn(function(this: HTMLDialogElement) { this.open = true; }) });
   Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value: vi.fn(function(this: HTMLDialogElement) { this.open = false; }) });
 });
@@ -44,6 +45,10 @@ async function type(value: string) { await act(async () => {
 it('opens a custom React UI and programmatic save/confirm persist the field through one pipeline', async () => {
   const { register, api } = fixture(), handle = register(), session = await open(handle);
   expect(document.querySelector('dialog')!.open).toBe(true); expect(session.value).toEqual({ text: 'before' });
+  const viewport = document.querySelector('.dshl-scrollbar-viewport')!;
+  expect(viewport.contains(document.querySelector('dialog textarea'))).toBe(true);
+  expect(viewport.contains(document.querySelector('dialog h2'))).toBe(false);
+  expect(viewport.contains(document.querySelector('.dshl-config-dialog-actions'))).toBe(false);
   await type('via plugin'); await click('插件保存');
   expect(api.update).toHaveBeenCalledWith('sample', { unrelated: 'keep', editor: { text: 'via plugin' }, secret: { $secret: 'opaque-reference', set: true } }, 3, expect.any(AbortSignal));
   expect(document.querySelector('dialog')).not.toBeNull();

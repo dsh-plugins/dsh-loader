@@ -24,6 +24,7 @@ export * from './config-dialogs.js';
 export { Arco } from './arco.js';
 export { ModelSelect } from './model-select.js';
 export type { ModelSelectProps } from './model-select.js';
+export { Scrollbar, type ScrollbarProps } from './scrollbar.js';
 export type { ConfigModelSource, ConfigModelList, ConfigModelGroup, ConfigModelOption, ConfigReasoningEffort } from './config-model-source.js';
 
 /** The `ui` facade plus the built-in anchor helpers. */

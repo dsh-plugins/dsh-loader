@@ -72,6 +72,12 @@ loader 已加载 Arco 官方 React 19 适配入口，`Arco.Message`、`Arco.Noti
 
 Arco 2.66.18 及部分依赖的声明文件存在 TypeScript 类型错误，消费方应沿用本仓库的 `strict: true`、`skipLibCheck: true` 配置，组件参数和业务代码仍会接受类型检查。loader 的发布包测试会分别核对自身声明与消费方代码，第三方声明内部的诊断单独排除。
 
+### 弹窗与滚动容器
+
+从 `@dsh-plugin/dsh-loader/client` 导入 `Scrollbar`，通过 `style={{ maxHeight: 400 }}` 或可收缩的 flex 容器限制高度。该组件使用 Arco 主题变量，隐藏原生滚动条与轨道，支持滚轮、触摸、拖动滑块和键盘操作。Arco React 未提供独立 Scrollbar，该封装由 loader 统一维护。
+
+配置弹窗外壳上下各留 `120px`，最大高度为 `calc(100dvh - 240px)`；只有正文内部滚动，标题与操作按钮保持可见。通过 `registerDialog` 注册的编辑器自动使用此外壳。
+
 ### ⚠️ 必须加入 externals（否则构建直接失败）
 
 ```

@@ -4,6 +4,7 @@ import { ConfigError, checkJSON, configAt, findConfigField, type ConfigValue, ty
 import type { ConfigClient } from '../config-client.js';
 import { ownedScope, type ResourceOwner } from '../lifecycle.js';
 import { setAt } from './config-fields.js';
+import { Scrollbar } from './scrollbar.js';
 
 export type ConfigDialogReader<T> = (signal: AbortSignal) => T | Promise<T>;
 export interface ConfigDialogSession<T> {
@@ -40,7 +41,8 @@ export interface ConfigDialogsAPI {
   dispose(): void;
 }
 const CSS = `
-.dshl-config-dialog{width:min(720px,calc(100vw - 32px));max-height:calc(100dvh - 32px);box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2,#8886);border-radius:12px;padding:20px;overflow:auto;font:inherit;background:var(--dsw-alias-bg-base,Canvas);color:var(--dsw-alias-label-primary,CanvasText);color-scheme:inherit}
+.dshl-config-dialog{width:min(720px,calc(100vw - 32px));max-height:calc(100dvh - 240px);margin:120px auto;box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2,#8886);border-radius:12px;padding:20px;overflow:hidden;font:inherit;background:var(--dsw-alias-bg-base,Canvas);color:var(--dsw-alias-label-primary,CanvasText);color-scheme:inherit}
+.dshl-config-dialog[open]{display:flex;flex-direction:column}.dshl-config-dialog-scroll{flex:0 1 auto}.dshl-config-dialog h2,.dshl-config-dialog-actions{flex-shrink:0}
 .dshl-config-dialog::backdrop{background:#0007}.dshl-config-dialog h2{font-size:1.1em;margin:0 0 16px}
 .dshl-config-dialog-body{min-width:0;overflow-wrap:anywhere}.dshl-config-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
 .dshl-config-dialog-body textarea{max-width:100%;box-sizing:border-box;resize:vertical}
@@ -62,8 +64,10 @@ function Dialog<T>({ session, options, ready }: { session: LiveSession<T>; optio
   const Component = options.component;
   return <dialog className="dshl-config-dialog" ref={element} aria-labelledby={title} aria-busy={session.saving} onCancel={event => { event.preventDefault(); session.close(); }} onClose={session.close}>
     <style>{CSS}</style><h2 id={title}>{options.title}</h2>
+    <Scrollbar className="dshl-config-dialog-scroll" aria-label={options.title}>
     <fieldset className="dshl-config-dialog-body" disabled={session.saving} style={{ border: 0, margin: 0, padding: 0 }}><EditorBoundary fail={session.broken}><Component value={session.value} saving={session.saving} error={session.error} errors={session.errors} setValue={session.setValue} setReader={session.setReader} save={session.save} close={session.close}/></EditorBoundary></fieldset>
     {session.error && <div role="alert" className="dshl-config-dialog-error"><p>{session.error}</p>{Object.entries(session.errors).map(([field, message]) => <p key={field}>{field}: {message}</p>)}</div>}
+    </Scrollbar>
     <div className="dshl-config-dialog-actions"><button type="button" onClick={session.close}>取消</button><button type="button" disabled={session.saving || session.failed} onClick={() => { void session.save().then(session.close).catch(() => {}); }}>{session.saving ? '保存中…' : '确认'}</button></div>
   </dialog>;
 }
