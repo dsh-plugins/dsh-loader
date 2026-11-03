@@ -6,6 +6,7 @@ import { ConfigStore } from '../../dist/services/config.js';
 import { ConfigError } from '../../dist/config.js';
 import { installConfigBridge } from '../../dist/services/config-bridge.js';
 import { operationsPanel, registerExampleOperations } from '../../examples/config-plugin/operations.mjs';
+import { arcoStyle } from '../../scripts/arco-style.mjs';
 const require = createRequire(import.meta.url);
 const viteRequire = createRequire(require.resolve('vitest/package.json'));
 const vite = await import(pathToFileURL(viteRequire.resolve('vite')).href);
@@ -27,7 +28,7 @@ const { documents } = registerExampleOperations(handle, ConfigError);
 handle.registerOperation('test.external', ({ input }) => { const document = documents.get(input.documentId); if (document) document.revision++; return { value: '外部修订已增加' }; });
 const route = [];
 const off = installConfigBridge({ register(prefix, handler) { route.push({ prefix, handler }); return () => {}; } }, store, () => true);
-const server = await createServer({ configFile: false, root: process.cwd(), server: { host: '127.0.0.1', port: 4187, strictPort: true }, esbuild: { jsx: 'automatic' }, plugins: [{ name: 'config-fixture', configureServer(server) {
+const server = await createServer({ configFile: false, root: process.cwd(), server: { host: '127.0.0.1', port: 4187, strictPort: true }, esbuild: { jsx: 'automatic' }, plugins: [arcoStyle(), { name: 'config-fixture', configureServer(server) {
   server.middlewares.use((req, res, next) => {
     if (req.url?.startsWith('/api/dshloader/config')) route[0].handler(req, res);
     else next();

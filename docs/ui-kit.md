@@ -42,6 +42,36 @@ DSH 客户端模块表的同步 `require` 解析顺序是「seed 词 → 已物�
 
 `exports["./client"].types` 指向 `lib/types/client-ui.d.ts`（由 `tsconfig.client.types.json` 发出），所以上面的 `import type` 是**真实类型**，不需要手写 cast。
 
+### 共享 Arco Design 控件
+
+附属插件通过同一入口导入 `Arco` 命名空间，使用 `@arco-design/web-react` 提供的全部组件、组合组件和类型：
+
+```tsx
+import { Arco } from '@dsh-plugin/dsh-loader/client';
+
+const buttonProps: Arco.ButtonProps = { type: 'primary' };
+
+export function ExampleEditor() {
+  return (
+    <Arco.Space direction="vertical">
+      <Arco.Input placeholder="输入配置内容" />
+      <Arco.Select options={['foo', 'bar']} style={{ width: 240 }} />
+      <Arco.Button {...buttonProps}>保存配置</Arco.Button>
+    </Arco.Space>
+  );
+}
+```
+
+客户端声明 `export const inject = ['dshLoaderUi']`，并在包清单的 `dsh.client.inject` 中声明 `@dsh-plugin/dsh-loader`。打包时将 `@dsh-plugin/dsh-loader/client` 与宿主 React、React DOM 列为 external；组件实例、上下文和样式由 loader 统一提供。附属插件无需再导入 Arco CSS，也无需单独打包 Arco。
+
+loader 在客户端启用时安装控件样式与主题变量，并过滤会影响整页字体、边距和原生元素的全局重置规则。宿主 `body[data-ds-dark-theme]` 的变化会同步到 `body[arco-theme='dark']`，包括跟随系统主题后的实际状态。下拉菜单、弹窗和 `Arco.Message` 等挂载到 body 的浮层同样继承当前主题。插件禁用或热重载时，loader 移除其样式和主题监听，并恢复仍由其持有的主题属性。
+
+loader 已加载 Arco 官方 React 19 适配入口，`Arco.Message`、`Arco.Notification`、`Arco.Modal.confirm` 等独立渲染接口与普通组件共用宿主的 React DOM。
+
+自定义 Arco 扩展样式使用 `var(--color-bg-2)`、`var(--color-text-1)`、`rgb(var(--primary-6))` 等主题变量。完整 API 参见 [Arco React 官方文档](https://arco.design/react/components/overview)。
+
+Arco 2.66.18 及部分依赖的声明文件存在 TypeScript 类型错误，消费方应沿用本仓库的 `strict: true`、`skipLibCheck: true` 配置，组件参数和业务代码仍会接受类型检查。loader 的发布包测试会分别核对自身声明与消费方代码，第三方声明内部的诊断单独排除。
+
 ### ⚠️ 必须加入 externals（否则构建直接失败）
 
 ```

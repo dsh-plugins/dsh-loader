@@ -108,6 +108,7 @@
     "node": ">=24.9.0"
   },
   "dependencies": {
+    "@arco-design/web-react": "^2.66.18",
     "@icon-park/react": "^1.4.2",
     "react-markdown": "^10.1.0",
     "semver": "^7.8.5"
@@ -131,6 +132,7 @@
     "@types/react-dom": "^18.3.7",
     "@types/semver": "^7.8.0",
     "jsdom": "^25.0.0",
+    "postcss": "^8.5.26",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tsdown": "^0.22.2",

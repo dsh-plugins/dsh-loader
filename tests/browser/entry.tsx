@@ -6,6 +6,7 @@ import { installConfigUI } from '../../src/ui/config-form.js';
 import type { ConfigModelSource } from '../../src/ui/config-model-source.js';
 import { createConfigDialogs } from '../../src/ui/config-dialogs.js';
 import { apply as applyDialogExample } from '../../examples/config-plugin/client.js';
+import { Arco, installArco } from '../../src/ui/arco.js';
 const version = new URLSearchParams(location.search).get('version') ?? '0.1.5-rc.3';
 const boot = createBootDescriptor(version, 'dsh-' + version.split('-')[0]);
 const client = createConfigClient(fetch.bind(window), url => new EventSource(url));
@@ -31,7 +32,28 @@ const loadModels: ConfigModelSource = async signal => {
 };
 const offUI = installConfigUI({ get: () => slots }, client, boot, dialogs, loadModels);
 window.addEventListener('beforeunload', () => { for (const off of releases) off(); offUI(); dialogs.dispose(); client.dispose(); });
-document.getElementById('theme')!.onclick = () => document.body.classList.toggle('dark');
+const offArco = installArco();
+document.getElementById('theme')!.onclick = () => {
+  const dark = document.body.classList.toggle('dark');
+  document.body.toggleAttribute('data-ds-dark-theme', dark);
+};
+const arcoContainer = document.createElement('section');
+arcoContainer.setAttribute('aria-label', '共享 Arco 控件');
+document.querySelector('main')!.appendChild(arcoContainer);
+const arcoRoot = createRoot(arcoContainer);
+function ArcoExample(): React.ReactElement {
+  const [visible, setVisible] = React.useState(false);
+  const [value, setValue] = React.useState('foo');
+  return <Arco.Space direction="vertical">
+    <Arco.Typography.Title heading={5}>共享 Arco 控件</Arco.Typography.Title>
+    <Arco.Input placeholder="Arco 输入框"/>
+    <Arco.Select aria-label="Arco 选项" value={value} onChange={setValue} options={['foo', 'bar']} style={{ width: 240 }}/>
+    <Arco.Button type="primary" onClick={() => setVisible(true)}>打开 Arco 弹窗</Arco.Button>
+    <Arco.Modal title="共享 Arco 弹窗" visible={visible} onOk={() => setVisible(false)} onCancel={() => setVisible(false)}>附属插件共享组件与主题</Arco.Modal>
+  </Arco.Space>;
+}
+arcoRoot.render(<ArcoExample/>);
+window.addEventListener('beforeunload', () => { arcoRoot.unmount(); offArco(); });
 
 // Record actual browser transition events for phase-order verification.
 const motionLog=document.getElementById('group-motion-log')!;

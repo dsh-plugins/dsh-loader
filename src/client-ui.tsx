@@ -35,6 +35,7 @@ import { installConversationEventsCompat } from './client-conversation-compat.js
 import { installConnectionApiCompat } from './client-connection-api-compat.js';
 import { createUi, type DshLoaderUi } from './ui/index.js';
 import { ResourceScope } from './lifecycle.js';
+import { installArco } from './ui/arco.js';
 
 // Re-export the whole UI surface so a consumer's
 // `import { Button, Switch, Field } from '@dsh-plugin/dsh-loader/client'`
@@ -127,6 +128,8 @@ export function apply(ctx: ClientContextLike): void {
   const resources = new ResourceScope();
   ctx.effect?.(() => resources.dispose);
   try {
+
+  resources.add(installArco());
 
   ensureDshModulesGlobal(win as never, ctx);
 

@@ -18,6 +18,7 @@
  * component dshloader hands to a plugin.
  */
 import { fileURLToPath } from 'node:url'
+import { arcoStyle } from './scripts/arco-style.mjs'
 
 /** Module specifiers the web shell shares into the frozen module table. */
 const CLIENT_EXTERNALS = [
@@ -42,6 +43,7 @@ export default {
   dts: false,
   sourcemap: true,
   clean: false,
+  plugins: [arcoStyle()],
   external: [...CLIENT_EXTERNALS],
   // External wins for module-table entries; every other dependency inlines.
   noExternal: (id) => (CLIENT_EXTERNALS.includes(id) ? undefined : true),

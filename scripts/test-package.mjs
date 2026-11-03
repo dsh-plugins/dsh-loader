@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, readdirSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -28,7 +28,7 @@ const link = (name, from = require) => {
   mkdirSync(dirname(destination), { recursive: true });
   symlinkSync(target, destination, process.platform === 'win32' ? 'junction' : 'dir');
 };
-for (const name of ['semver', '@icon-park/react', '@types/node', '@types/react', '@types/react-dom']) { link(name); }
+for (const name of ['semver', '@arco-design/web-react', '@icon-park/react', '@types/node', '@types/react', '@types/react-dom']) { link(name); }
 const reactTypes = createRequire(require.resolve('@types/react/package.json'));
 for (const name of ['@types/prop-types', 'csstype']) { link(name, reactTypes); }
 link('undici-types', createRequire(require.resolve('@types/node/package.json')));
@@ -46,7 +46,8 @@ import { defineConfig, type ConfigHandle, type ConfigField } from '@dsh-plugin/d
 import type { HostAPI, CordisContext } from '@dsh-plugin/dsh-loader';
 import type { ToolArgsError } from '@dsh-plugin/dsh-loader/tools';
 import type { SlotCore } from '@dsh-plugin/dsh-loader/ui-slots';
-import { ModelSelect, type DshLoaderUi, type ConfigDialogProps, type ModelSelectProps, type ConfigModelSource } from '@dsh-plugin/dsh-loader/client';
+import { Arco, ModelSelect, type DshLoaderUi, type ConfigDialogProps, type ModelSelectProps, type ConfigModelSource } from '@dsh-plugin/dsh-loader/client';
+import * as React from 'react';
 import type { ConfigModelValue } from '@dsh-plugin/dsh-loader/config';
 interface Example { title: string }
 declare const api: HostAPI, ctx: CordisContext;
@@ -59,15 +60,42 @@ const modelField: ConfigField = { type: 'model', key: 'assistantModel', label: '
 const loadModels: ConfigModelSource = async signal => { signal.throwIfAborted(); return { groups: [{ id: 'example', name: '示例', models: [{ id: 'example-model', name: '示例模型' }] }], failures: [] }; };
 const modelProps: ModelSelectProps = { value: model, onChange(value) { if (value) { console.log(value.provider); } }, loadModels };
 ModelSelect(modelProps);
+const arcoButtonProps: Arco.ButtonProps = { type: 'primary', children: '保存配置' };
+const arcoSelectProps: Arco.SelectProps = { options: ['foo', 'bar'] };
+const arcoButton: React.ReactElement<Arco.ButtonProps> = React.createElement(Arco.Button, arcoButtonProps);
+React.createElement(Arco.Select, arcoSelectProps);
 const handle: Promise<ConfigHandle<Example>> = api.config.register<Example>(ctx, defineConfig({ id: 'example', packageName: '@example/plugin', title: 'Example', fields: [group] }));
 handle.then(config => config.registerOperation('preview', ({ input, resource, config: saved, signal }) => ({ value: { text: String(input.text), revision: saved.revision, aborted: signal.aborted }, ...(resource ? { resource } : {}) })));
 defineConfig({ id: 'editor', packageName: '@example/editor', title: 'Editor', fields: [], panels: [{ id: 'documents', title: 'Documents', fields: [{ type: 'textarea', key: 'text', label: 'Text' }], operations: [{ id: 'preview', input: ['text'], readOnly: true, button: { label: 'Preview' }, result: [{ type: 'markdown' }] }] }] });
 `);
 writeFileSync(join(temp, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true, noEmit: true, skipLibCheck: false, module: 'NodeNext', moduleResolution: 'NodeNext', target: 'ES2023', jsx: 'react-jsx', types: ['node', 'react'] }, files: ['consumer.mts'] }));
-const typescriptPackage = require.resolve('typescript/package.json');
-const typescript = JSON.parse(readFileSync(typescriptPackage, 'utf8'));
-try { run(process.execPath, [resolve(dirname(typescriptPackage), typescript.bin.tsc), '-p', join(temp, 'tsconfig.json')]); }
-catch (error) { console.error(String(error.stdout)); process.exit(1); }
+const { API } = await import('typescript/unstable/sync');
+const compiler = new API({ cwd: temp });
+try {
+  const snapshot = compiler.updateSnapshot({ openProjects: [join(temp, 'tsconfig.json')] });
+  const program = snapshot.getProject(join(temp, 'tsconfig.json'))?.program;
+  assert(program, 'Packed-consumer TypeScript project was not loaded');
+  const diagnostics = [
+    ...program.getConfigFileParsingDiagnostics(), ...program.getProgramDiagnostics(),
+    ...program.getGlobalDiagnostics(), ...program.getSyntacticDiagnostics(),
+    ...program.getSemanticDiagnostics(),
+  ];
+  // Arco 及其依赖自带有误的声明；仍严格检查发布包、消费方及所有依赖解析错误。
+  const ownDiagnostics = diagnostics.filter(diagnostic => {
+    if (!diagnostic.fileName || [2307, 2688, 7016].includes(diagnostic.code)) {
+      return true;
+    }
+    const path = relative(temp, diagnostic.fileName);
+    return path !== '..' && !path.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`);
+  });
+  const upstreamDiagnostics = diagnostics.filter(diagnostic => !ownDiagnostics.includes(diagnostic));
+  if (upstreamDiagnostics.length > 0) {
+    console.log('Third-party declaration diagnostics:', upstreamDiagnostics.map(({ fileName, code }) => ({ fileName, code })));
+  }
+  assert.equal(ownDiagnostics.length, 0, JSON.stringify(ownDiagnostics, null, 2));
+} finally {
+  compiler.close();
+}
 console.log('Packed declarations: all public subpaths typecheck without dsh installed.');
 
 // Only runtime ABI fixtures are installed after the no-upstream type test.
