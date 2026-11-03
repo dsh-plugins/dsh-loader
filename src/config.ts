@@ -18,6 +18,10 @@ export interface ConfigField {
   optionsFrom?: { config: string[]; path?: never; operation?: never; label?: string[]; value?: string[] } | { operation: string; path?: string[]; config?: never; label?: string[]; value?: string[] };
   fields?: ConfigField[];
   item?: ConfigField;
+  /** 保留配置校验与持久化，由自定义管理面板提供编辑入口。 */
+  hidden?: boolean;
+  /** group 内嵌的临时操作面板 ID，不增加配置数据层级。 */
+  panel?: string;
   visibleWhen?: { path: string[]; equals: ConfigValue };
   /** Group/object presentation only; defaults to a fixed, expanded fieldset. */
   collapsible?: boolean;
@@ -36,7 +40,7 @@ export interface ConfigTemplate {
   panels?: ConfigPanel[];
 }
 /** A panel owns a page-local draft, independent of persisted configuration. */
-export interface ConfigPanel { id: string; title: string; description?: string; fields: ConfigField[]; operations: ConfigOperation[] }
+export interface ConfigPanel { id: string; title: string; description?: string; custom?: boolean; fields: ConfigField[]; operations: ConfigOperation[] }
 export interface ConfigResultDisplay { type: 'text' | 'markdown' | 'list' | 'json'; title?: string; path?: string[]; label?: string[] }
 export interface ConfigOperation {
   /** Unique across all panels of this template. */
@@ -94,10 +98,20 @@ export function validateTemplate(template: ConfigTemplate): void {
   if (!/^[a-z0-9][a-z0-9._-]{0,99}$/.test(template.id) || /\.$/.test(template.id) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(template.id)) throw new ConfigError('invalid-template', 'Invalid plugin ID');
   if (typeof template.packageName !== 'string' || !/^(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+$/i.test(template.packageName) || typeof template.title !== 'string' || !template.title.trim() || !Array.isArray(template.fields)) throw new ConfigError('invalid-template', 'Package name, title and fields are required');
   if (template.rowId !== undefined && (typeof template.rowId !== 'string' || !template.rowId || template.rowId.includes('#'))) throw new ConfigError('invalid-template', 'Invalid plugin row ID');
+  const embeddedPanels = new Set<string>();
   const walk = (fields: ConfigField[], keys = new Set<string>(), transient = false) => {
     if (!Array.isArray(fields)) throw new ConfigError('invalid-template', 'fields must be an array');
     for (const field of fields) {
       if (!field || typeof field.label !== 'string' || !field.label || !['text','textarea','password','number','boolean','select','multiselect','model','object','array','group'].includes(field.type)) throw new ConfigError('invalid-template', 'Invalid field');
+      if (field.hidden !== undefined && typeof field.hidden !== 'boolean') {
+        throw new ConfigError('invalid-template', 'hidden must be boolean');
+      }
+      if (field.panel !== undefined) {
+        if (transient || field.type !== 'group' || typeof field.panel !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(field.panel) || embeddedPanels.has(field.panel)) {
+          throw new ConfigError('invalid-template', 'Invalid or duplicate embedded panel');
+        }
+        embeddedPanels.add(field.panel);
+      }
       if (field.type === 'model' && (field.options !== undefined || field.optionsFrom !== undefined || field.fields !== undefined || field.item !== undefined || field.pattern !== undefined || field.min !== undefined || field.max !== undefined)) {
         throw new ConfigError('invalid-template', 'Model fields use the host model directory without static options or child fields');
       }
@@ -129,6 +143,9 @@ export function validateTemplate(template: ConfigTemplate): void {
   const path = (value: unknown, empty = false): value is string[] => Array.isArray(value) && (empty || value.length > 0) && value.every(key => typeof key === 'string' && key.length > 0 && !unsafe.has(key));
   if (template.panels !== undefined && !Array.isArray(template.panels)) throw new ConfigError('invalid-template', 'panels must be an array');
   for (const panel of template.panels ?? []) {
+    if (panel.custom !== undefined && typeof panel.custom !== 'boolean') {
+      throw new ConfigError('invalid-template', 'custom must be boolean');
+    }
     if (!identifier(panel.id) || panelIds.has(panel.id) || typeof panel.title !== 'string' || !panel.title || !Array.isArray(panel.operations)) throw new ConfigError('invalid-template', 'Invalid or duplicate panel');
     panelIds.add(panel.id); walk(panel.fields, new Set(), true);
     mapValues(panel.fields, defaultsFor(panel.fields), (field, value) => { if (field.type === 'password' && value !== '') throw new ConfigError('invalid-template', 'Transient passwords cannot have non-empty defaults'); return value; });
@@ -158,6 +175,11 @@ export function validateTemplate(template: ConfigTemplate): void {
     } };
     visit(panel.fields);
     for (const operation of panel.operations) if (operation.refresh && (!Array.isArray(operation.refresh) || operation.refresh.some(id => !panel.operations.some(target => target.id === id && target.readOnly && !target.fill?.length)))) throw new ConfigError('invalid-template', 'Refresh targets must be read operations without draft bindings');
+  }
+  for (const id of embeddedPanels) {
+    if (!panelIds.has(id)) {
+      throw new ConfigError('invalid-template', `Embedded panel does not exist: ${id}`);
+    }
   }
 }
 export function findConfigField(fields: ConfigField[], path: string[]): ConfigField | undefined {

@@ -46,7 +46,7 @@ import { defineConfig, type ConfigHandle, type ConfigField } from '@dsh-plugin/d
 import type { HostAPI, CordisContext } from '@dsh-plugin/dsh-loader';
 import type { ToolArgsError } from '@dsh-plugin/dsh-loader/tools';
 import type { SlotCore } from '@dsh-plugin/dsh-loader/ui-slots';
-import { Arco, ModelSelect, type DshLoaderUi, type ConfigDialogProps, type ModelSelectProps, type ConfigModelSource } from '@dsh-plugin/dsh-loader/client';
+import { Arco, ModelSelect, type DshLoaderUi, type ConfigDialogProps, type ConfigPanelProps, type ModelSelectProps, type ConfigModelSource } from '@dsh-plugin/dsh-loader/client';
 import * as React from 'react';
 import type { ConfigModelValue } from '@dsh-plugin/dsh-loader/config';
 interface Example { title: string }
@@ -54,6 +54,7 @@ declare const api: HostAPI, ctx: CordisContext;
 declare const ui: DshLoaderUi;
 const dialog = ui.config.registerDialog<Example>(ctx, { id: 'editor', configId: 'example', field: ['document'], title: 'Editor', component(props: ConfigDialogProps<Example>) { props.setReader(async signal => { signal.throwIfAborted(); return { title: props.value.title }; }); return null; } });
 dialog.open().then(session => session.save());
+ui.config.registerPanel(ctx, { configId: 'example', id: 'manager', component(props: ConfigPanelProps) { return React.createElement('button', { onClick: () => props.client.invoke(props.view.template.id, 'items.list', { input: {} }) }, '刷新'); } });
 const group: ConfigField = { type: 'group', label: 'Group', collapsible: true, defaultCollapsed: true, fields: [{ type: 'text', key: 'title', label: 'Title' }] };
 const model: ConfigModelValue = { provider: 'example', model: 'example-model', reasoningEffort: 'custom' };
 const modelField: ConfigField = { type: 'model', key: 'assistantModel', label: '辅助模型', default: model };

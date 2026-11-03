@@ -291,3 +291,11 @@ React.useEffect(() => setReader(async signal => {
 “取消”、Escape、close 和插件卸载均不自动保存。关闭会向 reader 和正在等待的请求发出 AbortSignal，并丢弃迟到结果；已在宿主提交的写入无法通过关闭撤销。UI 使用原生 modal dialog 管理焦点和背景交互，关闭后恢复原焦点；每个弹窗是独立 React 根，插件可自行包裹需要的 Provider。插件渲染异常会显示错误并禁用确认，避免保存未正常显示的编辑器。
 
 [自定义弹窗示例](../examples/config-plugin/client.tsx) 使用非受控输入和 setReader，同时演示插件按钮 `.save()` 与外壳“确认”。将此文件按插件现有构建流程编译为客户端 bundle，并保持 React、React DOM 和 `@dsh-plugin/dsh-loader/client` 为 external；它不由宿主 index.mjs 自动执行。通用配置表单和临时操作区继续由 loader 统一生成，自定义 UI 仅用于显式注册的弹窗。
+
+## 自定义管理面板
+
+在模板面板声明 `custom: true`，客户端通过 `ctx.dshLoaderUi.config.registerPanel(ctx, { configId, id, component })` 注册 React 组件，`id` 对应模板面板 ID。组件接收 `ConfigPanelProps` 中的 `view` 配置快照与 `client`，使用 `client.invoke` 调用已声明的临时操作，使用 `client.update` 携带修订号保存配置。注册随插件卸载回收；组件卸载时必须取消自身异步请求。
+
+持久化字段设置 `hidden: true` 后仍参与默认值、校验、脱敏与保存，由管理面板提供编辑入口。布局分组可设置 `panel: "memory-import"`，将该面板嵌入组内；同一面板不得重复嵌入，嵌入后不再显示于根列表。面板必须在 `template.panels` 中声明。
+
+临时操作的 password 字段可接收当前配置返回的 `$secret` 引用。loader 在服务端恢复实际值后校验并执行操作，适合测试尚未保存的 MCP 草稿；处理器只返回测试结果，禁止把实际凭据放入返回值。未知引用会被拒绝。

@@ -108,9 +108,10 @@ export class ConfigStore implements ConfigAPI {
     if (operation.requiresRevision && !request.resource) throw new ConfigError('revision-required', '请先加载资源以获取 revision');
     if (request.resource !== undefined) validateResource(request.resource);
     const resource = request.resource ? structuredClone(request.resource) : undefined;
-    const input = validateValues(operationFields(panel.fields, operation.input), request.input);
+    const fields = operationFields(panel.fields, operation.input);
+    const input = validateValues(fields, this.decode(entry, request.input, fields));
     // Async list IDs are resolved by the plugin; saved-config options are checked here.
-    mapValues(operationFields(panel.fields, operation.input), input, (field, value, path) => {
+    mapValues(fields, input, (field, value, path) => {
       if (field.optionsFrom?.config) {
         const allowed = configOptions(field, entry.value).map(option => option.value);
         if ((field.type === 'multiselect' ? value as unknown[] : value === '' && !field.required ? [] : [value]).some(item => !allowed.includes(item as string | number))) throw new ConfigError('validation', '已保存配置中的选项已变化', { [path.join('.')]: '无效选项' });
@@ -162,6 +163,14 @@ export class ConfigStore implements ConfigAPI {
         await rename(temporary, entry.file);
       } finally { await unlink(temporary).catch(error => { if (error.code !== 'ENOENT') console.error('[dshloader] temporary config cleanup failed', error); }); }
       entry.value = value; entry.revision = revision;
+      const passwords = new Set<string>();
+      mapValues(entry.template.fields, value, (field, item) => {
+        if (field.type === 'password') { passwords.add(String(item)); }
+        return item;
+      });
+      for (const [token, password] of entry.secrets) {
+        if (!passwords.has(password)) { entry.secrets.delete(token); }
+      }
       for (const listener of entry.watchers) { try { listener({ value: structuredClone(value), revision }); } catch (error) { console.error('[dshloader] config watcher failed', error); } }
       this.emit();
     });
@@ -189,17 +198,20 @@ export class ConfigStore implements ConfigAPI {
     return { template, value: this.redact(entry, entry.value), defaults: this.redact(entry, defaultsFor(entry.template.fields)), revision: entry.revision, availableOperations: [...entry.handlers.keys()] };
   }
   list(): ConfigView[] { return [...this.entries.keys()].map(id => this.read(id)); }
+  private decode(entry: Entry, value: ConfigValues, fields = entry.template.fields): ConfigValues {
+    return mapValues(fields, value, (field, item) => {
+      if (field.type !== 'password' || typeof item === 'string') { return item; }
+      const token = item && typeof item === 'object' && !Array.isArray(item) ? item.$secret : undefined;
+      if (typeof token !== 'string' || !entry.secrets.has(token)) { throw new ConfigError('invalid', 'Invalid secret reference'); }
+      return entry.secrets.get(token)!;
+    });
+  }
   async write(id: string, value: ConfigValues, expectedRevision: number): Promise<ConfigView> {
     const entry = this.entry(id);
     if (!Number.isSafeInteger(expectedRevision)) throw new ConfigError('invalid', 'expectedRevision is required');
     checkJSON(value);
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ConfigError('invalid', 'Expected configuration object');
-    const decoded = mapValues(entry.template.fields, { ...entry.value, ...value }, (field, item) => {
-      if (field.type !== 'password' || typeof item === 'string') return item;
-      const token = item && typeof item === 'object' && !Array.isArray(item) ? item.$secret : undefined;
-      if (typeof token !== 'string' || !entry.secrets.has(token)) throw new ConfigError('invalid', 'Invalid secret reference');
-      return entry.secrets.get(token)!;
-    });
+    const decoded = this.decode(entry, { ...entry.value, ...value });
     await this.commit(entry, decoded, expectedRevision, true);
     return this.read(id);
   }

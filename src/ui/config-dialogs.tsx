@@ -33,7 +33,20 @@ export interface ConfigDialogHandle<T> {
   close(): void;
   dispose(): void;
 }
+/** 自定义管理面板复用宿主配置快照及带鉴权、并发校验和取消能力的客户端。 */
+export interface ConfigPanelProps {
+  view: ConfigView;
+  client: ConfigClient;
+}
+/** id 对应配置模板中声明 custom:true 的临时面板。 */
+export interface ConfigPanelOptions {
+  id: string;
+  configId: string;
+  component: React.ComponentType<ConfigPanelProps>;
+}
 export interface ConfigDialogsAPI {
+  registerPanel(owner: ResourceOwner, options: ConfigPanelOptions): () => void;
+  panelComponent(configId: string, id: string): React.ComponentType<ConfigPanelProps> | undefined;
   registerDialog<T = ConfigValue>(owner: ResourceOwner, options: ConfigDialogOptions<T>): ConfigDialogHandle<T>;
   openDialog(configId: string, id: string, field: string[]): Promise<ConfigDialogSession<unknown>>;
   hasDialog(configId: string, id: string, field: string[]): boolean;
@@ -74,6 +87,7 @@ function Dialog<T>({ session, options, ready }: { session: LiveSession<T>; optio
 /** UI functions live only in the browser registry; host templates remain JSON. */
 export function createConfigDialogs(client: ConfigClient): ConfigDialogsAPI {
   const registrations = new Map<string, { field: string[]; open(): Promise<ConfigDialogSession<any>>; dispose(): void }>();
+  const panels = new Map<string, { component: React.ComponentType<ConfigPanelProps>; dispose(): void }>();
   const listeners = new Set<() => void>(); let disposed = false;
   const key = (configId: string, id: string) => JSON.stringify([configId, id]);
   const emit = () => { for (const listener of listeners) listener(); };
@@ -82,6 +96,32 @@ export function createConfigDialogs(client: ConfigClient): ConfigDialogsAPI {
     return registration && JSON.stringify(registration.field) === JSON.stringify(field) ? registration : undefined;
   };
   return {
+    registerPanel(owner, options) {
+      if (disposed) {
+        throw new ConfigError('disposed', '配置界面已卸载');
+      }
+      if (!options || typeof options.configId !== 'string' || typeof options.id !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,99}$/.test(options.configId) || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(options.id) || !options.component || !['function', 'object'].includes(typeof options.component)) {
+        throw new ConfigError('invalid', '自定义面板注册无效');
+      }
+      const id = key(options.configId, options.id);
+      if (panels.has(id)) {
+        throw new ConfigError('duplicate', '自定义面板已注册');
+      }
+      const scope = ownedScope(owner), registration = { component: options.component, dispose: scope.dispose };
+      if (scope.disposed) {
+        throw new ConfigError('disposed', '面板所属插件已卸载');
+      }
+      scope.add(() => {
+        if (panels.get(id) === registration) {
+          panels.delete(id);
+          emit();
+        }
+      });
+      panels.set(id, registration);
+      emit();
+      return scope.dispose;
+    },
+    panelComponent: (configId, id) => panels.get(key(configId, id))?.component,
     registerDialog<T = ConfigValue>(owner: ResourceOwner, input: ConfigDialogOptions<T>): ConfigDialogHandle<T> {
       if (disposed) throw new ConfigError('disposed', 'Config dialogs disposed');
       if (!input || typeof input.configId !== 'string' || typeof input.id !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,99}$/.test(input.configId) || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(input.id) || !Array.isArray(input.field) || !input.field.length || input.field.some(part => typeof part !== 'string' || !part || ['__proto__','constructor','prototype'].includes(part)) || typeof input.title !== 'string' || !input.title.trim() || !input.component || !['function','object'].includes(typeof input.component)) throw new ConfigError('invalid', 'Invalid config dialog registration');
@@ -159,6 +199,6 @@ export function createConfigDialogs(client: ConfigClient): ConfigDialogsAPI {
     hasDialog: (configId, id, field) => Boolean(find(configId, id, field)),
     openDialog: (configId, id, field) => find(configId, id, field)?.open() ?? Promise.reject(new ConfigError('not-found', '插件尚未注册此配置弹窗')),
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    dispose() { if (disposed) return; disposed = true; const errors = []; for (const registration of [...registrations.values()]) { try { registration.dispose(); } catch (error) { errors.push(error); } } registrations.clear(); listeners.clear(); if (errors.length) throw new AggregateError(errors, 'Config dialog cleanup failed'); },
+    dispose() { if (disposed) return; disposed = true; const errors = []; for (const registration of [...registrations.values(), ...panels.values()]) { try { registration.dispose(); } catch (error) { errors.push(error); } } registrations.clear(); panels.clear(); listeners.clear(); if (errors.length) throw new AggregateError(errors, 'Config dialog cleanup failed'); },
   };
 }

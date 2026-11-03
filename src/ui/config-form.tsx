@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { type ConfigView, ConfigError } from '../config.js';
+import { type ConfigView, type ConfigField, ConfigError } from '../config.js';
 import type { ConfigClient } from '../config-client.js';
 import type { BootDescriptor } from '../bootstrap.js';
 import { Fields, setAt } from './config-fields.js';
@@ -8,6 +8,13 @@ import type { ConfigDialogsAPI } from './config-dialogs.js';
 import { ConfigModelsContext } from './model-select.js';
 import type { ConfigModelSource } from './config-model-source.js';
 import { ConfigToast } from './config-toast.js';
+
+class PanelBoundary extends React.Component<{ component: React.ComponentType<any>; children: React.ReactNode }, { error: string; component?: React.ComponentType<any> }> {
+  override state = { error: '', component: this.props.component };
+  static getDerivedStateFromProps(props: { component: React.ComponentType<any> }, state: { component?: React.ComponentType<any> }) { return props.component === state.component ? null : { error: '', component: props.component }; }
+  static getDerivedStateFromError(error: unknown) { return { error: error instanceof Error ? error.message : String(error) }; }
+  override render() { return this.state.error ? <p role="alert">管理面板无法显示：{this.state.error}</p> : this.props.children; }
+}
 
 interface ConfigSaveAction { dirty: boolean; save(): Promise<boolean> }
 type ConfigSaveRegistration = (id: string, current: () => ConfigSaveAction) => () => void;
@@ -62,6 +69,26 @@ export function ConfigCard({ view, client, dialogs, layout = 'settings', registe
   const form = React.useRef<HTMLDivElement>(null);
   const prefix = React.useId();
   const pendingSave = React.useRef<Promise<boolean>>();
+  const embedded = new Set<string>();
+  const collectPanels = (fields: ConfigField[]) => {
+    for (const field of fields) {
+      if (field.panel) { embedded.add(field.panel); }
+      if (field.fields) { collectPanels(field.fields); }
+      if (field.item) { collectPanels([field.item]); }
+    }
+  };
+  collectPanels(view.template.fields);
+  const renderPanel = (id: string, inline = false) => {
+    const panel = view.template.panels?.find(panel => panel.id === id);
+    if (!panel) { return null; }
+    if (!panel.custom) { return <OperationPanel key={id} pluginId={view.template.id} panel={panel} client={client} saved={base.revision > view.revision ? base.value : view.value} available={view.availableOperations}/>; }
+    const Component = dialogs?.panelComponent(view.template.id, id);
+    return <section key={id} className={inline ? undefined : 'dshl-config-panel'} data-config-panel={id}>
+      {!inline && <h3>{panel.title}</h3>}
+      {panel.description && <p className="dshl-config-help">{panel.description}</p>}
+      {Component ? <PanelBoundary component={Component}><Component view={base.revision > view.revision ? base : view} client={client}/></PanelBoundary> : <p role="status">请启用插件客户端以显示此管理面板。</p>}
+    </section>;
+  };
   const [, refreshDialogs] = React.useReducer(value => value + 1, 0);
   React.useEffect(() => dialogs?.subscribe(refreshDialogs), [dialogs]);
   React.useEffect(() => { if (!dirty && view.revision >= base.revision) { setBase(view); setDraft(view.value); } }, [view, dirty, base.revision]);
@@ -100,9 +127,9 @@ export function ConfigCard({ view, client, dialogs, layout = 'settings', registe
   const actions = <div className="dshl-config-actions dshl-config-save"><button type="submit" title="Ctrl+S 保存本页全部已修改配置" disabled={busy || !dirty}>{busy ? '保存中…' : '保存'}</button><button type="button" disabled={busy} onClick={() => { const latest = view.revision >= base.revision ? view : base; setBase(latest); setDraft(latest.value); setDirty(false); setError(''); setErrors({}); }}>取消修改</button><button type="button" disabled={busy} onClick={() => { setDraft(structuredClone(view.defaults)); setDirty(true); }}>恢复默认值</button>{layout === 'plugins' && <div className="dshl-config-save-feedback">{feedback}{dirty && !error && view.revision === base.revision && <span role="status">有未保存的修改</span>}</div>}</div>;
   return <details className="dshl-config-card" data-layout={layout} onToggle={event => setOpen(event.currentTarget.open)}><summary>{view.template.title}</summary>{view.template.description && <p>{view.template.description}</p>}<div className="dshl-config-form" ref={form}><form noValidate onSubmit={event => { event.preventDefault(); void save().then(success => { if (success) { onSaved?.(); } }); }}>
     {layout === 'plugins' && actions}
-    <fieldset className="dshl-config-fields" disabled={busy}><Fields disabled={busy} dialog={(field, path, id) => <button type="button" id={id} disabled={!dialogs?.hasDialog(view.template.id, field.dialog!.id, path)} onClick={() => { void dialogs!.openDialog(view.template.id, field.dialog!.id, path).catch(cause => setError(cause instanceof Error ? cause.message : String(cause))); }}>{field.dialog!.label ?? '打开配置弹窗'}</button>} fields={view.template.fields} draft={draft} errors={errors} prefix={prefix} change={(path, value) => { setDraft(current => setAt(current, path, value)); setDirty(true); }}/></fieldset>
+    <fieldset className="dshl-config-fields" disabled={busy}><Fields disabled={busy} panel={id => renderPanel(id, true)} dialog={(field, path, id) => <button type="button" id={id} disabled={!dialogs?.hasDialog(view.template.id, field.dialog!.id, path)} onClick={() => { void dialogs!.openDialog(view.template.id, field.dialog!.id, path).catch(cause => setError(cause instanceof Error ? cause.message : String(cause))); }}>{field.dialog!.label ?? '打开配置弹窗'}</button>} fields={view.template.fields} draft={draft} errors={errors} prefix={prefix} change={(path, value) => { setDraft(current => setAt(current, path, value)); setDirty(true); }}/></fieldset>
     {layout === 'settings' && <>{feedback}{actions}</>}
-  </form>{view.template.panels?.map(panel => <OperationPanel key={panel.id} pluginId={view.template.id} panel={panel} client={client} saved={base.revision > view.revision ? base.value : view.value} available={view.availableOperations}/>)}</div></details>;
+  </form>{view.template.panels?.filter(panel => !embedded.has(panel.id)).map(panel => renderPanel(panel.id))}</div></details>;
 }
 export function ConfigPage({ client, ids, dialogs, loadModels, layout = 'settings' }: { client: ConfigClient; ids?: string[]; dialogs?: ConfigDialogsAPI; loadModels?: ConfigModelSource; layout?: BootDescriptor['capabilities']['configUI'] }): React.ReactElement {
   const [views, setViews] = React.useState<ConfigView[]>([]);
