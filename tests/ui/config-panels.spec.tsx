@@ -3,7 +3,8 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import { createConfigDialogs, type ConfigPanelProps } from '../../src/ui/config-dialogs.js';
-import { ConfigCard } from '../../src/ui/config-form.js';
+import { ConfigCard, CONFIG_CSS } from '../../src/ui/config-form.js';
+import { Arco, installArco } from '../../src/ui/arco.js';
 import type { ConfigView } from '../../src/config.js';
 import type { ConfigClient } from '../../src/config-client.js';
 
@@ -42,5 +43,24 @@ it('在分组中挂载自定义面板并隐藏替代字段，卸载和重新注�
     act(() => { api.dispose(); root.unmount(); });
     container.remove();
     for (const cleanup of releases) { cleanup(); }
+  }
+});
+
+it('管理面板中的 Arco 按钮保持与独立组件相同的样式', () => {
+  const releaseStyle = installArco();
+  const view: ConfigView = { template: { id: 'sample', packageName: '@example/sample', title: '配置', fields: [], panels: [{ id: 'manager', title: '管理', custom: true, fields: [], operations: [] }] }, value: {}, defaults: {}, revision: 1 };
+  const api = createConfigDialogs({} as ConfigClient);
+  api.registerPanel({ effect: fn => fn() }, { configId: 'sample', id: 'manager', component: () => <Arco.Button size="small" type="primary">面板按钮</Arco.Button> });
+  const container = document.body.appendChild(document.createElement('div')), root = createRoot(container);
+  try {
+    act(() => root.render(<><style>{CONFIG_CSS}</style><Arco.Button size="small" type="primary">独立按钮</Arco.Button><div className="dshl-config"><ConfigCard view={view} client={{} as ConfigClient} dialogs={api}/></div></>));
+    const buttons = [...container.querySelectorAll('button')];
+    const reference = getComputedStyle(buttons.find(button => button.textContent === '独立按钮')!);
+    const actual = getComputedStyle(buttons.find(button => button.textContent === '面板按钮')!);
+    for (const property of ['background-color', 'color', 'padding-top', 'padding-bottom']) {
+      expect(actual.getPropertyValue(property)).toBe(reference.getPropertyValue(property));
+    }
+  } finally {
+    act(() => { api.dispose(); root.unmount(); }); container.remove(); releaseStyle();
   }
 });

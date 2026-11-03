@@ -46,7 +46,7 @@ export const CONFIG_CSS = `
 .dshl-config-group[data-expanded=true]>legend .dshl-config-group-triangle{transform:rotate(90deg)}
 @media(prefers-reduced-motion:reduce){.dshl-config-group[data-collapsible],.dshl-config-group[data-collapsible]>.dshl-config-group-body,.dshl-config-group-triangle{transition:none}}
 .dshl-config-help{font-size:12px;opacity:.7;margin-top:4px}.dshl-config-error{color:var(--color-danger,#d33);font-size:13px;overflow-wrap:anywhere}
-.dshl-config-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}.dshl-config button{font:inherit;color:inherit;background:transparent;border:1px solid var(--color-border,#8888);border-radius:6px;padding:6px 12px;cursor:pointer}.dshl-config button:disabled{opacity:.5;cursor:default}
+.dshl-config-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}.dshl-config button:not([class*="arco-"]){font:inherit;color:inherit;background:transparent;border:1px solid var(--color-border,#8888);border-radius:6px;padding:6px 12px;cursor:pointer}.dshl-config button:not([class*="arco-"]):disabled{opacity:.5;cursor:default}
 .dshl-config-card[data-layout=plugins] .dshl-config-save{position:sticky;top:var(--plugin-header-scroll-padding,0px);z-index:2;margin-top:0;margin-bottom:12px;padding:8px 0;border-bottom:1px solid var(--dsw-alias-border-l2,#8886);background:var(--dsw-alias-bg-base,Canvas);align-items:center}
 .dshl-config-card[data-layout=plugins] .dshl-config-save>button[type=submit]{background:var(--dsw-alias-button-primary-fill,Highlight);color:var(--dsw-alias-label-primary-foreground,HighlightText);border-color:transparent}
 .dshl-config-save-feedback{flex-basis:100%;font-size:12px}.dshl-config-save-feedback:empty{display:none}.dshl-config-save-feedback p{margin:0}
