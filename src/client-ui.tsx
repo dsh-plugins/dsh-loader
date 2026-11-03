@@ -1,10 +1,11 @@
 export * from './ui/client-compat.js';
 import { createConfigClient } from './config-client.js';
 import { installConfigUI } from './ui/config-form.js';
+import { createConfigModelSource } from './ui/config-model-source.js';
 import { createConfigDialogs, type ConfigDialogsAPI } from './ui/config-dialogs.js';
 export { createConfigClient } from './config-client.js';
 export type { ConfigClient } from './config-client.js';
-export type { ConfigTemplate, ConfigField, ConfigValues, ConfigView, ConfigPanel, ConfigOperation, ConfigOperationRequest, ConfigOperationResult, ConfigResource, ConfigResultDisplay } from './config.js';
+export type { ConfigTemplate, ConfigField, ConfigModelValue, ConfigValues, ConfigView, ConfigPanel, ConfigOperation, ConfigOperationRequest, ConfigOperationResult, ConfigResource, ConfigResultDisplay } from './config.js';
 /**
  * dshloader BROWSER BUNDLE ENTRY.
  *
@@ -139,13 +140,14 @@ export function apply(ctx: ClientContextLike): void {
   let dialogs: ConfigDialogsAPI | undefined;
   if (api) {
     const client = createConfigClient(window.fetch.bind(window), url => new EventSource(url), `${api.boot.bridgePrefix}/config`);
+    const loadModels = createConfigModelSource(ctx);
     dialogs = createConfigDialogs(client);
     resources.add(dialogs.dispose);
     Object.assign(api, { config: client });
     resources.add(() => client.dispose());
     const mount = (scope: ClientContextLike) => {
       if (resources.disposed) return;
-      const off = resources.add(installConfigUI(scope, client, api.boot, dialogs));
+      const off = resources.add(installConfigUI(scope, client, api.boot, dialogs, loadModels));
       scope.effect?.(() => off);
     };
     if (ctx.inject) ctx.inject(['slots'], mount); else mount(ctx);

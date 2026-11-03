@@ -55,6 +55,7 @@ export async function apply(ctx: CordisContext & { dshLoader: HostAPI }) {
 | `number` | 有限数字；min/max 表示数值范围 |
 | `boolean` | 开关 |
 | `select` / `multiselect` | `options: [{ label, value: string或number }]`；多选存数组 |
+| `model` | 从当前宿主目录选择模型，存 `{ provider, model, reasoningEffort? }` 或 `null`；自动提供搜索、提供商分组与推理等级 |
 | `object` | `fields`；创建嵌套对象，可设置折叠属性 |
 | `array` | `item` 指定每项字段模板；支持嵌套对象/数组，min/max 表示项数 |
 | `group` | `fields`，无 key；只分组，不改变数据层级，可设置折叠属性 |
@@ -71,6 +72,39 @@ export async function apply(ctx: CordisContext & { dshLoader: HostAPI }) {
 收起动画先在 220ms 内缩小内容高度，再用 120ms 渐隐边框；展开先用 120ms 渐显边框，再在 220ms 内展开高度。快速反向点击从当前动画位置过渡，内容尺寸变化也会自动适配。系统开启减少动态效果时直接切换状态。
 
 缺失值补默认值：文本为空串，开关为 false，数组为空数组，数字为 min 或 0，单选为首个选项，对象递归补齐。显式默认值也必须通过字段校验。隐藏字段保留值，保存时仍校验完整结构。模板升级只补缺失字段；不自动迁移旧插件的其他文件。
+
+### 模型选择器
+
+插件声明 `type: 'model'` 即可使用内置组合控件，无需编写客户端插件或自行维护模型选项：
+
+```ts
+import { defineConfig } from '@dsh-plugin/dsh-loader/config';
+import type { ConfigModelValue } from '@dsh-plugin/dsh-loader/config';
+
+interface Preferences { assistantModel: ConfigModelValue | null }
+const template = defineConfig({
+  id: 'example-model', packageName: '@example/model', title: '辅助模型',
+  fields: [{ type: 'model', key: 'assistantModel', label: '模型',
+    description: '选择辅助任务使用的模型，留空时由插件决定。', default: null }],
+});
+const handle = await ctx.dshLoader.config.register<Preferences>(ctx, template);
+const selection = handle.get().value.assistantModel;
+// selection 非空时，provider、model 与 reasoningEffort 可用于插件自己的模型请求。
+```
+
+收起时显示模型名称及当前推理等级。已选择模型时，点击后先展示“模型”和“推理等级”；空值直接打开模型列表。模型列表按提供商分组，搜索同时匹配提供商名称、提供商 ID、模型名称与模型 ID，忽略大小写和首尾空格。选择后的行显示勾选标记。弹层随控件定位，并根据剩余空间选择向上或向下打开，长列表在内部滚动。
+
+推理等级使用提供商返回的 ID、名称和顺序，截图中的 Off / Low / High / Max 只是其中一种模型的可选项。切换模型时，当前显式等级若受新模型支持则保留，否则采用新模型声明的有效默认等级；新模型没有有效默认等级时省略 `reasoningEffort`。不支持推理等级的模型只展示模型选择。“使用提供商默认值”会移除显式等级，后续请求使用提供商当时的默认行为。
+
+字段未声明默认值时为 `null`；可选字段提供“清除选择”，`required: true` 则要求保存时选择模型。显式默认值必须是合法模型对象或可选字段的 `null`。对象只接受非空的 `provider`、`model` 与可选的非空 `reasoningEffort` 字符串。模型目录属于提示信息，宿主保存时校验数据结构，插件发起推理时验证路由是否可用。目录移除模型或修改等级后，原配置会保留并显示提示，刷新目录也会保留草稿。
+
+目录通过 loader 已适配的 `connection.api.llm.models({})` 读取，对应官方 [`session/modelCatalog` 接口规范](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/api/session-controller/src/types.ts)。首次展开及再次打开时重新读取，可手动刷新；单个提供商失败时显示其原因，其余提供商仍可选择。整体加载失败时显示错误及“重试加载”。关闭弹层、字段卸载和加载源变化会取消当前等待，迟到结果被丢弃。配置卡片保存期间禁用控件并关闭弹层。
+
+方向键从触发按钮打开控件，在列表内上下移动；Home / End 跳到首尾项，Enter / 空格选择当前按钮。Escape 从模型或等级列表返回概览，再按一次关闭；空值直接打开的模型列表可用一次 Escape 关闭。点击外部或焦点移出会关闭弹层，选择完成或使用 Escape 关闭后焦点回到触发按钮。搜索框保留正常的文本编辑按键与输入法组合输入。
+
+`model` 支持 group、object、array 和临时操作区，沿用所在表单的显隐、错误提示、取消、默认值及修订冲突规则。保存只更新当前插件的这个字段。模型字段使用宿主目录，不接受 `options`、`optionsFrom`、`fields`、`item`、`min`、`max` 或 `pattern`。
+
+自定义客户端界面可从 `@dsh-plugin/dsh-loader/client` 导入受控组件 `ModelSelect`，传入 `value`、`onChange` 与 `loadModels(signal)`。`loadModels` 返回 `{ groups: [{ id, name, models: [{ id, name, reasoning?: { efforts: [{ id, name }], defaultEffort? } }] }], failures: [{ id, name, message }] }`，对应类型 `ConfigModelSource` 和 `ConfigModelList`。组件位于 loader 的统一配置页面内时，自动使用页面的目录读取入口；独立 React 根需显式提供 `loadModels`。
 
 ## 文件和并发
 

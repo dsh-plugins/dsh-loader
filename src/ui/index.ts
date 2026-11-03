@@ -21,6 +21,9 @@ export * from './icons.js';
 export * from './components.js';
 export * from './menu.js';
 export * from './config-dialogs.js';
+export { ModelSelect } from './model-select.js';
+export type { ModelSelectProps } from './model-select.js';
+export type { ConfigModelSource, ConfigModelList, ConfigModelGroup, ConfigModelOption, ConfigReasoningEffort } from './config-model-source.js';
 
 /** The `ui` facade plus the built-in anchor helpers. */
 export interface DshLoaderUi extends UiAPI {

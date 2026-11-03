@@ -11,6 +11,7 @@ export const template = defineConfig({
   fields: [
     { type: 'text', key: 'displayName', label: '显示名称', default: '示例', required: true },
     { type: 'boolean', key: 'enabled', label: '启用', default: true },
+    { type: 'model', key: 'assistantModel', label: '辅助模型', default: null, description: '选择模型与推理等级，留空时由插件决定。' },
     { type: 'object', key: 'document', label: '文档配置', dialog: { id: 'document-editor', label: '编辑文档配置' }, fields: [
       { type: 'text', key: 'title', label: '文档标题', default: '示例文档', required: true },
       { type: 'textarea', key: 'content', label: '文档正文', default: '配置弹窗的示例内容', required: true },

@@ -90,7 +90,7 @@ export function OperationPanel({ pluginId, panel, client, saved, available }: { 
   };
   return <section className="dshl-config-panel" aria-label={panel.title}><h3>{panel.title}</h3>{panel.description && <p>{panel.description}</p>}
     <form noValidate onSubmit={event => event.preventDefault()}>
-      <fieldset className="dshl-config-fields" disabled={changing}><Fields fields={panel.fields} draft={draft} errors={fields} prefix={prefix} change={change} options={field => configOptions(field, saved, results)}/></fieldset>
+      <fieldset className="dshl-config-fields" disabled={changing}><Fields disabled={changing} fields={panel.fields} draft={draft} errors={fields} prefix={prefix} change={change} options={field => configOptions(field, saved, results)}/></fieldset>
       <div className="dshl-config-actions">{panel.operations.filter(operation => operation.button).map(operation => <button key={operation.id} type="button" disabled={!allowed(operation.id) || busy.includes(operation.id) || changing || Boolean(operation.requiresRevision && !resource)} onClick={() => { void run(operation); }}>{busy.includes(operation.id) ? `${operation.button!.label}中…` : operation.button!.label}</button>)}</div>
       {panel.operations.map(operation => <div key={operation.id} className="dshl-config-operation" aria-busy={busy.includes(operation.id)}>
         {busy.includes(operation.id) && <p role="status">{operation.button?.label ?? operation.id}：处理中… <button type="button" onClick={() => { calls.current.get(operation.id)?.abort(); calls.current.delete(operation.id); setBusy([...calls.current.keys()]); setMessages(old => ({ ...old, [operation.id]: { success: '操作已取消' } })); }}>取消操作</button></p>}

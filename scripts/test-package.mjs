@@ -13,7 +13,8 @@ const temp = mkdtempSync(join(tmpdir(), 'dsh-loader-package-'));
 const run = (cmd, args, options = {}) => execFileSync(cmd, args, { cwd: temp, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...options });
 const npm = process.env.npm_execpath;
 assert(npm, 'Run through npm run test:package');
-const packed = JSON.parse(run(process.execPath, [npm, 'pack', '--json', '--pack-destination', temp], { cwd: root }))[0];
+const [packed] = Object.values(JSON.parse(run(process.execPath, [npm, 'pack', '--json', '--pack-destination', temp], { cwd: root })));
+assert(packed && typeof packed.filename === 'string' && Array.isArray(packed.files), 'npm pack returned no package metadata');
 const packageDir = join(temp, 'node_modules/@dsh-plugin/dsh-loader');
 mkdirSync(packageDir, { recursive: true });
 run('tar', ['-xf', join(temp, packed.filename), '-C', packageDir, '--strip-components=1']);
@@ -21,13 +22,16 @@ assert.equal(JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8')).
 for (const file of ['README.zh_CN.md', 'docs/config-api.md', 'docs/support.md', 'examples/config-plugin/index.mjs', 'examples/config-plugin/operations.mjs', 'examples/config-plugin/client.tsx']) {
   assert(packed.files.some(entry => entry.path === file), `Missing packed documentation: ${file}`);
 }
-const link = (name) => {
-  const target = dirname(require.resolve(`${name}/package.json`));
+const link = (name, from = require) => {
+  const target = dirname(from.resolve(`${name}/package.json`));
   const destination = join(temp, 'node_modules', name);
   mkdirSync(dirname(destination), { recursive: true });
   symlinkSync(target, destination, process.platform === 'win32' ? 'junction' : 'dir');
 };
-for (const name of ['semver', '@icon-park/react', '@types/node', '@types/react', '@types/react-dom', '@types/prop-types', 'csstype', 'undici-types']) link(name);
+for (const name of ['semver', '@icon-park/react', '@types/node', '@types/react', '@types/react-dom']) { link(name); }
+const reactTypes = createRequire(require.resolve('@types/react/package.json'));
+for (const name of ['@types/prop-types', 'csstype']) { link(name, reactTypes); }
+link('undici-types', createRequire(require.resolve('@types/node/package.json')));
 writeFileSync(join(temp, 'package.json'), JSON.stringify({ type: 'module', private: true }));
 
 function walk(folder) { return readdirSync(folder, { withFileTypes: true }).flatMap(item => item.isDirectory() ? walk(join(folder, item.name)) : [join(folder, item.name)]); }
@@ -42,13 +46,19 @@ import { defineConfig, type ConfigHandle, type ConfigField } from '@dsh-plugin/d
 import type { HostAPI, CordisContext } from '@dsh-plugin/dsh-loader';
 import type { ToolArgsError } from '@dsh-plugin/dsh-loader/tools';
 import type { SlotCore } from '@dsh-plugin/dsh-loader/ui-slots';
-import type { DshLoaderUi, ConfigDialogProps } from '@dsh-plugin/dsh-loader/client';
+import { ModelSelect, type DshLoaderUi, type ConfigDialogProps, type ModelSelectProps, type ConfigModelSource } from '@dsh-plugin/dsh-loader/client';
+import type { ConfigModelValue } from '@dsh-plugin/dsh-loader/config';
 interface Example { title: string }
 declare const api: HostAPI, ctx: CordisContext;
 declare const ui: DshLoaderUi;
 const dialog = ui.config.registerDialog<Example>(ctx, { id: 'editor', configId: 'example', field: ['document'], title: 'Editor', component(props: ConfigDialogProps<Example>) { props.setReader(async signal => { signal.throwIfAborted(); return { title: props.value.title }; }); return null; } });
 dialog.open().then(session => session.save());
 const group: ConfigField = { type: 'group', label: 'Group', collapsible: true, defaultCollapsed: true, fields: [{ type: 'text', key: 'title', label: 'Title' }] };
+const model: ConfigModelValue = { provider: 'example', model: 'example-model', reasoningEffort: 'custom' };
+const modelField: ConfigField = { type: 'model', key: 'assistantModel', label: '辅助模型', default: model };
+const loadModels: ConfigModelSource = async signal => { signal.throwIfAborted(); return { groups: [{ id: 'example', name: '示例', models: [{ id: 'example-model', name: '示例模型' }] }], failures: [] }; };
+const modelProps: ModelSelectProps = { value: model, onChange(value) { if (value) { console.log(value.provider); } }, loadModels };
+ModelSelect(modelProps);
 const handle: Promise<ConfigHandle<Example>> = api.config.register<Example>(ctx, defineConfig({ id: 'example', packageName: '@example/plugin', title: 'Example', fields: [group] }));
 handle.then(config => config.registerOperation('preview', ({ input, resource, config: saved, signal }) => ({ value: { text: String(input.text), revision: saved.revision, aborted: signal.aborted }, ...(resource ? { resource } : {}) })));
 defineConfig({ id: 'editor', packageName: '@example/editor', title: 'Editor', fields: [], panels: [{ id: 'documents', title: 'Documents', fields: [{ type: 'textarea', key: 'text', label: 'Text' }], operations: [{ id: 'preview', input: ['text'], readOnly: true, button: { label: 'Preview' }, result: [{ type: 'markdown' }] }] }] });

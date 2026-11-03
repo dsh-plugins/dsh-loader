@@ -1,8 +1,10 @@
 import type { ResourceOwner } from './lifecycle.js';
 export type ConfigValue = null | boolean | number | string | ConfigValue[] | { [key: string]: ConfigValue };
 export type ConfigValues = Record<string, ConfigValue>;
+/** 模型路由与可选推理等级，等级 ID 由模型提供商定义。 */
+export type ConfigModelValue = { provider: string; model: string; reasoningEffort?: string };
 export interface ConfigField {
-  type: 'text' | 'textarea' | 'password' | 'number' | 'boolean' | 'select' | 'multiselect' | 'object' | 'array' | 'group';
+  type: 'text' | 'textarea' | 'password' | 'number' | 'boolean' | 'select' | 'multiselect' | 'model' | 'object' | 'array' | 'group';
   key?: string;
   label: string;
   description?: string;
@@ -95,7 +97,10 @@ export function validateTemplate(template: ConfigTemplate): void {
   const walk = (fields: ConfigField[], keys = new Set<string>(), transient = false) => {
     if (!Array.isArray(fields)) throw new ConfigError('invalid-template', 'fields must be an array');
     for (const field of fields) {
-      if (!field || typeof field.label !== 'string' || !field.label || !['text','textarea','password','number','boolean','select','multiselect','object','array','group'].includes(field.type)) throw new ConfigError('invalid-template', 'Invalid field');
+      if (!field || typeof field.label !== 'string' || !field.label || !['text','textarea','password','number','boolean','select','multiselect','model','object','array','group'].includes(field.type)) throw new ConfigError('invalid-template', 'Invalid field');
+      if (field.type === 'model' && (field.options !== undefined || field.optionsFrom !== undefined || field.fields !== undefined || field.item !== undefined || field.pattern !== undefined || field.min !== undefined || field.max !== undefined)) {
+        throw new ConfigError('invalid-template', 'Model fields use the host model directory without static options or child fields');
+      }
       if ((field.collapsible !== undefined && typeof field.collapsible !== 'boolean') || (field.defaultCollapsed !== undefined && typeof field.defaultCollapsed !== 'boolean')) throw new ConfigError('invalid-template', 'Collapse options must be boolean');
       if ((field.collapsible !== undefined || field.defaultCollapsed !== undefined) && !['group', 'object'].includes(field.type)) throw new ConfigError('invalid-template', 'Collapse options require a group or object');
       if (field.defaultCollapsed && !field.collapsible) throw new ConfigError('invalid-template', 'defaultCollapsed requires collapsible=true');
@@ -180,6 +185,7 @@ export function validateResource(resource: ConfigResource): void {
 }
 export function fieldDefault(field: ConfigField): ConfigValue {
   if (field.default !== undefined) return structuredClone(field.default);
+  if (field.type === 'model') { return null; }
   if (field.type === 'object') return defaultsFor(field.fields!);
   if (field.type === 'array' || field.type === 'multiselect') return [];
   if (field.type === 'boolean') return false;
@@ -215,6 +221,16 @@ export function validateValues(fields: ConfigField[], input: ConfigValues): Conf
       else if (field.required && !value.trim()) fail('此项必填');
       else if (field.min !== undefined && value.length < field.min || field.max !== undefined && value.length > field.max) fail('文本长度超出范围');
       else if (field.pattern && !new RegExp(field.pattern).test(value)) fail('格式不正确');
+    } else if (field.type === 'model') {
+      if (value === null) {
+        if (field.required) { fail('请选择模型'); }
+      } else if (!value || typeof value !== 'object' || Array.isArray(value)
+        || typeof value.provider !== 'string' || !value.provider.trim()
+        || typeof value.model !== 'string' || !value.model.trim()
+        || Object.hasOwn(value, 'reasoningEffort') && (typeof value.reasoningEffort !== 'string' || !value.reasoningEffort.trim())
+        || Object.keys(value).some(key => !['provider', 'model', 'reasoningEffort'].includes(key))) {
+        fail('必须是包含 provider、model 和可选 reasoningEffort 的模型选择');
+      }
     } else if (field.type === 'number') {
       if (typeof value !== 'number' || !Number.isFinite(value)) fail('必须是有效数字');
       else if (field.min !== undefined && value < field.min || field.max !== undefined && value > field.max) fail('数字超出范围');

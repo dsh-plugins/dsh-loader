@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { createConfigClient } from '../../src/config-client.js';
 import { createBootDescriptor } from '../../src/bootstrap.js';
 import { installConfigUI } from '../../src/ui/config-form.js';
+import type { ConfigModelSource } from '../../src/ui/config-model-source.js';
 import { createConfigDialogs } from '../../src/ui/config-dialogs.js';
 import { apply as applyDialogExample } from '../../examples/config-plugin/client.js';
 const version = new URLSearchParams(location.search).get('version') ?? '0.1.5-rc.3';
@@ -18,7 +19,17 @@ const slots = {
     root.render(<Component/>);
   },
 };
-const offUI = installConfigUI({ get: () => slots }, client, boot, dialogs);
+const loadModels: ConfigModelSource = async signal => {
+  signal.throwIfAborted();
+  return { groups: [
+    { id: 'example', name: '示例提供商', models: [
+      { id: 'example-flash', name: 'Example Flash', reasoning: { efforts: [{ id: 'off', name: 'Off' }, { id: 'low', name: 'Low' }, { id: 'high', name: 'High' }, { id: 'max', name: 'Max' }], defaultEffort: 'high' } },
+      ...Array.from({ length: 24 }, (_, index) => ({ id: `example-${index}`, name: `Example Model ${index}` })),
+    ] },
+    { id: 'example-alt', name: '另一提供商', models: [{ id: 'example-flash', name: 'Another Flash' }] },
+  ], failures: [] };
+};
+const offUI = installConfigUI({ get: () => slots }, client, boot, dialogs, loadModels);
 window.addEventListener('beforeunload', () => { for (const off of releases) off(); offUI(); dialogs.dispose(); client.dispose(); });
 document.getElementById('theme')!.onclick = () => document.body.classList.toggle('dark');
 
