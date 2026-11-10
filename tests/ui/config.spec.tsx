@@ -49,6 +49,27 @@ it('supports conditional visibility and array changes without a plugin renderer'
   expect(container.textContent).toContain('详细内容'); click(container, '新增'); expect(container.textContent).toContain('删除第 1 项');
   click(container, '删除第 1 项'); expect(container.textContent).not.toContain('删除第 1 项');
 });
+it('disables a checkbox from the draft without clearing its value', () => {
+  const custom = structuredClone(view);
+  custom.template.fields.push(
+    { type: 'boolean', key: 'replaceText', label: '替换文字' },
+    { type: 'boolean', key: 'typewriter', label: '打字机', disabledWhen: { path: ['replaceText'], equals: false } },
+  );
+  Object.assign(custom.value, { replaceText: false, typewriter: true });
+  const { container } = render(client(), custom);
+  const replaceText = container.querySelector<HTMLInputElement>('input[id$="-replaceText"]')!;
+  const typewriter = container.querySelector<HTMLInputElement>('input[id$="-typewriter"]')!;
+
+  expect(typewriter.disabled).toBe(true);
+  act(() => typewriter.click());
+  expect(typewriter.checked).toBe(true);
+  act(() => replaceText.click());
+  expect(typewriter.disabled).toBe(false);
+  act(() => typewriter.click());
+  act(() => replaceText.click());
+  expect(typewriter.disabled).toBe(true);
+  expect(typewriter.checked).toBe(false);
+});
 it('routes old versions to settings and new versions to keyed plugin slots, with cleanup', async () => {
   const rows: any[] = []; const releases = vi.fn();
   const ctx = { get: () => ({ inject: (_name: string, callback: () => unknown) => { callback(); return releases; }, register: (options: unknown) => rows.push(options) }) };

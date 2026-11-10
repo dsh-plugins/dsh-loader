@@ -39,7 +39,15 @@ export function Fields({ fields, draft, path = [], change, errors, prefix, optio
     if (field.dialog) control = dialog?.(field, next, id) ?? <button type="button" id={id} disabled>{field.dialog.label ?? '打开配置弹窗'}</button>;
     else if (field.type === 'model') control = <ModelSelect {...props} value={value as ConfigModelValue | null} onChange={model => change(next, model)} label={field.label} required={field.required} disabled={disabled} invalid={Boolean(error)} describedBy={props['aria-describedby']}/>;
     else if (field.type === 'array') control = <div className="dshl-config-array">{(Array.isArray(value) ? value : []).map((_, itemIndex) => <section key={itemIndex}><Fields fields={[{ ...field.item!, key: String(itemIndex) }]} path={next} draft={draft} change={change} errors={errors} prefix={prefix} options={options} dialog={dialog} panel={panel} disabled={disabled}/><button type="button" onClick={() => change(next, (value as ConfigValue[]).filter((_, i) => i !== itemIndex))}>删除第 {itemIndex + 1} 项</button></section>)}<button type="button" onClick={() => change(next, [...value as ConfigValue[], fieldDefault(field.item!)])}>新增</button></div>;
-    else if (field.type === 'boolean') control = <input {...props} type="checkbox" checked={value === true} onChange={event => change(next, event.target.checked)}/>;
+    else if (field.type === 'boolean') {
+      const condition = field.disabledWhen;
+      const locked = disabled || (condition !== undefined && at(draft, condition.path) === condition.equals);
+      control = <input {...props} type="checkbox" checked={value === true} disabled={locked} onChange={event => {
+        if (!locked) {
+          change(next, event.target.checked);
+        }
+      }}/>;
+    }
     else if (field.type === 'select' || field.type === 'multiselect') control = <select {...props} multiple={field.type === 'multiselect'} value={field.type === 'multiselect' ? (value as ConfigValue[]).map(item => JSON.stringify(item)) : JSON.stringify(value)} onChange={event => {
       const decode = (text: string) => JSON.parse(text);
       change(next, field.type === 'multiselect' ? [...event.target.selectedOptions].map(option => decode(option.value)) : decode(event.target.value));

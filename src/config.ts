@@ -9,6 +9,8 @@ export interface ConfigField {
   label: string;
   description?: string;
   default?: ConfigValue;
+  /** 布尔字段缺失时，优先使用同层已有布尔字段的值。 */
+  defaultFrom?: string;
   required?: boolean;
   min?: number;
   max?: number;
@@ -23,6 +25,8 @@ export interface ConfigField {
   /** group 内嵌的临时操作面板 ID，不增加配置数据层级。 */
   panel?: string;
   visibleWhen?: { path: string[]; equals: ConfigValue };
+  /** 布尔开关按草稿值禁用，保留字段值及校验。 */
+  disabledWhen?: { path: string[]; equals: boolean };
   /** Group/object presentation only; defaults to a fixed, expanded fieldset. */
   collapsible?: boolean;
   /** Initial UI state when collapsible=true; never stored as a config value. */
@@ -120,6 +124,18 @@ export function validateTemplate(template: ConfigTemplate): void {
       if (field.defaultCollapsed && !field.collapsible) throw new ConfigError('invalid-template', 'defaultCollapsed requires collapsible=true');
       if (field.dialog !== undefined && (transient || field.type === 'group' || !field.dialog || Array.isArray(field.dialog) || typeof field.dialog.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(field.dialog.id) || unsafe.has(field.dialog.id) || field.dialog.label !== undefined && (typeof field.dialog.label !== 'string' || !field.dialog.label))) throw new ConfigError('invalid-template', 'Invalid config dialog declaration');
       if (field.visibleWhen && (!Array.isArray(field.visibleWhen.path) || !field.visibleWhen.path.length || field.visibleWhen.path.some(key => typeof key !== 'string' || unsafe.has(key)) || field.visibleWhen.equals === undefined)) throw new ConfigError('invalid-template', 'Invalid visibility condition');
+      if (field.disabledWhen !== undefined) {
+        const condition = field.disabledWhen;
+        if (field.type !== 'boolean' || field.dialog || !condition || !Array.isArray(condition.path) ||
+          !condition.path.length || condition.path.some(key => typeof key !== 'string' || !key || unsafe.has(key)) ||
+          typeof condition.equals !== 'boolean') {
+          throw new ConfigError('invalid-template', 'Invalid boolean field disabled condition');
+        }
+      }
+      if (field.defaultFrom !== undefined && (field.type !== 'boolean' || typeof field.defaultFrom !== 'string' ||
+        !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(field.defaultFrom) || unsafe.has(field.defaultFrom) || field.defaultFrom === field.key)) {
+        throw new ConfigError('invalid-template', 'Invalid boolean default source');
+      }
       if ((field.min !== undefined && !Number.isFinite(field.min)) || (field.max !== undefined && !Number.isFinite(field.max)) || (field.min !== undefined && field.max !== undefined && field.min > field.max)) throw new ConfigError('invalid-template', 'Invalid field bounds');
       if (field.optionsFrom !== undefined && (!transient || !['select','multiselect'].includes(field.type) || field.options || !field.optionsFrom || typeof field.optionsFrom !== 'object' || Array.isArray(field.optionsFrom))) throw new ConfigError('invalid-template', 'Dynamic options require a transient selection without static options');
       if (field.type === 'group') { if (!field.fields) throw new ConfigError('invalid-template', 'Group needs fields'); walk(field.fields, keys, transient); continue; }
@@ -227,8 +243,14 @@ export function mapValues(fields: ConfigField[], input: ConfigValues, map: (fiel
     return map(field, value, at);
   };
   for (const field of fields) {
-    if (field.type === 'group') Object.assign(result, mapValues(field.fields!, input, map, path));
-    else result[field.key!] = visit(field, input[field.key!] === undefined ? fieldDefault(field) : input[field.key!], [...path, field.key!]);
+    if (field.type === 'group') {
+      Object.assign(result, mapValues(field.fields!, input, map, path));
+    } else {
+      const inherited = field.defaultFrom === undefined ? undefined : input[field.defaultFrom];
+      const stored = input[field.key!];
+      const value = stored !== undefined ? stored : typeof inherited === 'boolean' ? inherited : fieldDefault(field);
+      result[field.key!] = visit(field, value, [...path, field.key!]);
+    }
   }
   return result;
 }

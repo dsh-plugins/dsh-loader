@@ -100,6 +100,27 @@ test('partial object and array defaults fill nested fields on first registration
   assert.deepEqual(store.read('nested').defaults, handle.get().value);
 });
 
+test('new boolean fields inherit legacy preferences until explicitly set', async t => {
+  const { root, store, context, handle } = await fixture(t);
+  handle.dispose();
+  await writeFile(join(root, 'config/sample/config.json'), JSON.stringify({
+    formatVersion: 1, revision: 3, value: { enabled: false },
+  }));
+  const upgrade = defineConfig({ ...template, fields: [
+    { type: 'boolean', key: 'enabled', label: '动画', default: true },
+    { type: 'boolean', key: 'replaceText', label: '替换文字', default: true, defaultFrom: 'enabled' },
+  ] });
+  const updated = await store.register(context, upgrade);
+  assert.deepEqual(updated.get(), { revision: 3, value: { enabled: false, replaceText: false } });
+  assert.deepEqual(store.read('sample').defaults, { enabled: true, replaceText: true });
+  await updated.update({ enabled: true });
+  assert.deepEqual(updated.get().value, { enabled: true, replaceText: false });
+  await updated.update({ enabled: false, replaceText: true });
+  updated.dispose();
+  const reloaded = await store.register(context, upgrade);
+  assert.deepEqual(reloaded.get().value, { enabled: false, replaceText: true });
+});
+
 
 test('collapsible group/object options stay in the template and never change persisted values', async t => {
   const {store,context,root,handle}=await fixture(t);handle.dispose();

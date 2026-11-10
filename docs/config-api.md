@@ -53,7 +53,7 @@ export async function apply(ctx: CordisContext & { dshLoader: HostAPI }) {
 | --- | --- |
 | `text` / `textarea` / `password` | 字符串；min/max 表示长度，pattern 是正则表达式字符串 |
 | `number` | 有限数字；min/max 表示数值范围 |
-| `boolean` | 开关 |
+| `boolean` | 开关。可用 `disabledWhen: { path: string[], equals: boolean }` 按草稿值禁用控件，保留已选值。可用 `defaultFrom` 在字段缺失时读取同层已有的布尔值，便于升级旧配置 |
 | `select` / `multiselect` | `options: [{ label, value: string或number }]`；多选存数组 |
 | `model` | 从当前宿主目录选择模型，存 `{ provider, model, reasoningEffort? }` 或 `null`；自动提供搜索、提供商分组与推理等级 |
 | `object` | `fields`；创建嵌套对象，可设置折叠属性 |
