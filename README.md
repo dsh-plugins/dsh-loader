@@ -38,7 +38,9 @@ npm install --prefix <profile-directory> <absolute-path-to-dsh-plugin-dsh-loader
 
 `setup` writes the dependency and Cordis patch to the named profile. Install the locally packed archive into that same profile, then restart dsh. These commands do not publish the package.
 
-Inject `dshLoader` to access `config`, `settings`, `web`, `services`, `registry`, `llm`, `dsh`, and `patch`. The client entry is `@dsh-plugin/dsh-loader/client`; host module subpaths have explicit ESM and CJS exports.
+Inject `dshLoader` to access `config`, `settings`, `web`, `services`, `registry`, `llm`, `dsh`, `shell`, `sandbox`, and `patch`. The client entry is `@dsh-plugin/dsh-loader/client`; host module subpaths have explicit ESM and CJS exports.
+
+`shell` and `sandbox` are for plugins that have to provide their own `ctx.shell`: `shell.base({ shellArgv })` returns a class extending the host's own local executor, so the plugin decides only the argv while deadlines, output caps, spill files, and process-tree termination stay the host's. Which executor seam applies (0.1.5/0.1.6 `run`/`start` versus 0.1.7+ `execute`) comes from the adapter metadata, never from a version check in the plugin; `sandbox` normalizes `confine`, result classification, and the escalation vocabulary. See [API](docs/api.md#shell-与-sandbox-门面).
 
 ### Configuration
 

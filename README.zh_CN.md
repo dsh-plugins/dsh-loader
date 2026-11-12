@@ -38,7 +38,9 @@ npm install --prefix <profile-directory> <absolute-path-to-dsh-plugin-dsh-loader
 
 `setup` 向指定 profile 写入依赖和 Cordis patch；随后在同一 profile 安装本地打包文件并重启 dsh。上述步骤不会发布 npm 包。
 
-插件依赖 `dshLoader` 后可使用 `config`、`settings`、`web`、`services`、`registry`、`llm`、`dsh`、`patch`。客户端入口为 `@dsh-plugin/dsh-loader/client`，宿主模块子路径同时提供 ESM 与 CJS 出口。
+插件依赖 `dshLoader` 后可使用 `config`、`settings`、`web`、`services`、`registry`、`llm`、`dsh`、`shell`、`sandbox`、`patch`。客户端入口为 `@dsh-plugin/dsh-loader/client`，宿主模块子路径同时提供 ESM 与 CJS 出口。
+
+`shell` 与 `sandbox` 供需要自己实现 `ctx.shell` 的插件使用：`shell.base({ shellArgv })` 返回一个继承当前宿主本地执行器的类，插件只决定 argv，截止时间、输出上限、溢出文件和进程树终止全部沿用宿主；两代执行器接缝（0.1.5/0.1.6 的 `run`/`start` 与 0.1.7 起的 `execute`）由适配器元数据选择，插件不判版本。`sandbox` 归一化 `confine`、结果分类与升级词表。详见 [API](docs/api.md#shell-与-sandbox-门面)。
 
 ### 统一插件配置
 
