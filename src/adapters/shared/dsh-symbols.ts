@@ -34,6 +34,7 @@ export interface DshSymbolModules {
   compaction?: { BasicCompactionEngine?: unknown };
   llm?: { BlockAssembler?: unknown };
   agentInstructions?: { renderAgentInstructions?: unknown; renderWorkspaceContext?: unknown };
+  subprocess?: { SubprocessExecutableNotFoundError?: unknown };
 }
 
 /**
@@ -79,6 +80,18 @@ export interface DshSymbolsAPI {
   llm: {
     /** `BlockAssembler` — dsh's streaming content-block assembler. */
     readonly BlockAssembler: new (...args: any[]) => any;
+  };
+  subprocess: {
+    /**
+     * Build an error shaped like `SubprocessExecutableNotFoundError`.
+     *
+     * A plugin needs it to tell "this candidate does not exist" apart from "the
+     * provider itself failed": the two take different paths, and neither should
+     * require importing `@deepseek-ai/dsh-subprocess`. When the module is
+     * missing the fallback keeps the same `name`/`code` fields, so callers
+     * branching on those still work.
+     */
+    notFoundError(message: string): Error;
   };
 }
 
@@ -175,6 +188,18 @@ export function createDshSymbolsAPI(opts: { modules?: DshSymbolModules }): DshSy
           '@deepseek-ai/dsh-llm',
           'llm.BlockAssembler',
         );
+      },
+    },
+    subprocess: {
+      notFoundError(message) {
+        const Ctor = m.subprocess?.SubprocessExecutableNotFoundError;
+        if (typeof Ctor === 'function') return new (Ctor as new (m: string) => Error)(message);
+        // Callers branch on name/code rather than instanceof, so the fallback
+        // has to carry both fields even without the upstream class.
+        const error = new Error(message) as Error & { code: string };
+        error.name = 'SubprocessExecutableNotFoundError';
+        error.code = 'SUBPROCESS_EXECUTABLE_NOT_FOUND';
+        return error;
       },
     },
   };

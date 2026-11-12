@@ -7,20 +7,57 @@ export async function preloadRegistryModules(importModule: (specifier: string) =
       return undefined;
     }
   };
-  const [sandbox, permissionPresets, settings, llm, tools, timeout, credentials, subagent, compaction, agent, agentInstructions] =
-    await Promise.all([
-      load('@deepseek-ai/dsh-sandbox'),
-      load('@deepseek-ai/dsh-permission-presets'),
-      load('@deepseek-ai/dsh-settings'),
-      load('@deepseek-ai/dsh-llm'),
-      load('@deepseek-ai/dsh-tools'),
-      load('@deepseek-ai/dsh-timeout'),
-      load('@deepseek-ai/dsh-credentials'),
-      load('@deepseek-ai/dsh-subagent'),
-      load('@deepseek-ai/dsh-compaction-basic'),
-      load('@deepseek-ai/dsh-agent'),
-      load('@deepseek-ai/dsh-agent-instructions'),
-    ]);
+  // The specifiers are held in variables so TypeScript does not try to resolve
+  // them at build time: dshloader declares no `@deepseek-ai/*` dependency, and
+  // these packages only exist in the dsh runtime that loads the profile.
+  const sandboxSpecifier = '@deepseek-ai/dsh-sandbox';
+  const permissionPresetsSpecifier = '@deepseek-ai/dsh-permission-presets';
+  const settingsSpecifier = '@deepseek-ai/dsh-settings';
+  const llmSpecifier = '@deepseek-ai/dsh-llm';
+  const toolsSpecifier = '@deepseek-ai/dsh-tools';
+  const timeoutSpecifier = '@deepseek-ai/dsh-timeout';
+  const credentialsSpecifier = '@deepseek-ai/dsh-credentials';
+  const subagentSpecifier = '@deepseek-ai/dsh-subagent';
+  const compactionSpecifier = '@deepseek-ai/dsh-compaction-basic';
+  const agentSpecifier = '@deepseek-ai/dsh-agent';
+  const agentInstructionsSpecifier = '@deepseek-ai/dsh-agent-instructions';
+  const shellSpecifier = '@deepseek-ai/dsh-shell';
+  const pwshLocalSpecifier = '@deepseek-ai/dsh-pwsh-local';
+  const bashLocalSpecifier = '@deepseek-ai/dsh-bash-local';
+  const subprocessSpecifier = '@deepseek-ai/dsh-subprocess';
+  const [
+    sandbox,
+    permissionPresets,
+    settings,
+    llm,
+    tools,
+    timeout,
+    credentials,
+    subagent,
+    compaction,
+    agent,
+    agentInstructions,
+    shell,
+    pwshLocal,
+    bashLocal,
+    subprocess,
+  ] = await Promise.all([
+    load(sandboxSpecifier),
+    load(permissionPresetsSpecifier),
+    load(settingsSpecifier),
+    load(llmSpecifier),
+    load(toolsSpecifier),
+    load(timeoutSpecifier),
+    load(credentialsSpecifier),
+    load(subagentSpecifier),
+    load(compactionSpecifier),
+    load(agentSpecifier),
+    load(agentInstructionsSpecifier),
+    load(shellSpecifier),
+    load(pwshLocalSpecifier),
+    load(bashLocalSpecifier),
+    load(subprocessSpecifier),
+  ]);
   return {
     agent,
     sandbox: sandbox as RegistryModules['sandbox'],
@@ -33,5 +70,9 @@ export async function preloadRegistryModules(importModule: (specifier: string) =
     subagent: subagent as RegistryModules['subagent'],
     compaction: compaction as RegistryModules['compaction'],
     agentInstructions: agentInstructions as RegistryModules['agentInstructions'],
+    shell: shell as RegistryModules['shell'],
+    pwshLocal: pwshLocal as RegistryModules['pwshLocal'],
+    bashLocal: bashLocal as RegistryModules['bashLocal'],
+    subprocess: subprocess as RegistryModules['subprocess'],
   };
 }

@@ -106,3 +106,21 @@ test('a partially populated bag degrades per symbol, not wholesale', () => {
   // ... while a sibling from the same package still reports its absence.
   assert.throws(() => dsh.tools.ToolArgsError, /ToolArgsError/);
 });
+
+test('subprocess.notFoundError uses the real class and falls back to the same error fields', () => {
+  class SubprocessExecutableNotFoundError extends Error {
+    constructor(message) {
+      super(message);
+      this.name = 'SubprocessExecutableNotFoundError';
+      this.code = 'SUBPROCESS_EXECUTABLE_NOT_FOUND';
+    }
+  }
+  const real = createDshSymbolsAPI({ modules: { subprocess: { SubprocessExecutableNotFoundError } } });
+  assert.ok(real.subprocess.notFoundError('missing') instanceof SubprocessExecutableNotFoundError);
+
+  // Without the module the caller still routes on name/code, so those two must survive.
+  const fallback = createDshSymbolsAPI({ modules: {} }).subprocess.notFoundError('missing');
+  assert.equal(fallback.name, 'SubprocessExecutableNotFoundError');
+  assert.equal(fallback.code, 'SUBPROCESS_EXECUTABLE_NOT_FOUND');
+  assert.match(fallback.message, /missing/);
+});

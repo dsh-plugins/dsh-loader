@@ -38,6 +38,14 @@ export interface AdapterFactory {
   supports: string;
   name: string;
   create(ctx: CordisContext, config?: HostAdapterConfig): HostAdapter;
+  /**
+   * The patch metadata this factory was built from, when it is a patch adapter.
+   *
+   * The shell facade reads its `shell` section from here: which local executor
+   * package backs each platform, and whether this host executes through
+   * `run`/`start` or `execute`.
+   */
+  metadata?: import('./adapters/metadata.js').PatchMetadata;
 }
 
 /** An instantiated host adapter. */
@@ -93,6 +101,10 @@ export interface HostAPI {
   llm: import('./services/llm.js').LlmAPI;
   /** Module-level dsh symbols (defineTool, deadline, BasicCompactionEngine, ...). */
   dsh: import('./services/dsh-symbols.js').DshSymbolsAPI;
+  /** Executor-base facade: implement a `ctx.shell` provider without importing `@deepseek-ai/*` values. */
+  shell: import('./services/shell.js').ShellFacade;
+  /** Sandbox facade: normalized `confine`, result classification, and the escalation vocabulary. */
+  sandbox: import('./services/shell.js').SandboxFacade;
   registerPackageAlias(oldName: string, newName: string, owner?: import('./lifecycle.js').ResourceOwner): Promise<() => void>;
 }
 

@@ -16,6 +16,7 @@ import { createServicesAPI } from './services/services.js';
 import { createRegistryAPI, type RegistryAPI, type RegistryModules } from './services/registry.js';
 import { createLlmAPI, type LlmAPI } from './services/llm.js';
 import { createDshSymbolsAPI, type DshSymbolsAPI } from './services/dsh-symbols.js';
+import { createShellFacade, createSandboxFacade, type ShellFacade, type SandboxFacade } from './services/shell.js';
 import { createPatchAPI, type PatchAPI } from './patch.js';
 import { installHostPackageAliases } from './host-aliases.js';
 import type {
@@ -73,6 +74,12 @@ export function createHostAPI(opts: {
     (adapter?.registry as RegistryAPI | undefined) ?? createRegistryAPI({ ctx, modules: registryModules });
   const llm: LlmAPI = adapter?.llm ?? createLlmAPI({ module: registryModules?.llm });
   const dsh: DshSymbolsAPI = adapter?.dsh ?? createDshSymbolsAPI({ modules: registryModules });
+  // The shell facades name no dsh service shape beyond `ctx.get(...)`, so no
+  // adapter override seam exists: the seam difference is DATA (PatchMetadata
+  // `shell.seam`), which is exactly what keeps one facade body valid for every
+  // patch. The factory's metadata is the only version-dependent input.
+  const shell: ShellFacade = createShellFacade({ ctx, modules: registryModules, metadata: factory.metadata });
+  const sandbox: SandboxFacade = createSandboxFacade({ ctx, modules: registryModules });
 
   // Runtime host package-name alias registration. The adapter's apply()
   // installs the static set at boot; this method lets plugins add more
@@ -108,6 +115,8 @@ export function createHostAPI(opts: {
     registry,
     llm,
     dsh,
+    shell,
+    sandbox,
     registerPackageAlias,
   };
 }

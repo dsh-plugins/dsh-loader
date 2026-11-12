@@ -14,6 +14,9 @@ import type { AdapterFactory, HostAdapter } from '../types.js';
 export function makePatchAdapter(client: PatchMetadata): AdapterFactory {
   return {
     name: client.id, supports: client.patch,
+    // The shell facade reads its seam and local package names from here rather
+    // than re-deriving them from a version string.
+    metadata: client,
     create(ctx, config) {
       const base = create(ctx, config);
       const resources = ownedScope(ctx);

@@ -4,7 +4,7 @@
 
 ## 宿主
 
-插件声明 `inject = ['dshLoader']` 后使用 `ctx.dshLoader`。根入口导出 `HostAPI`、`CordisContext`、`SettingsAPI`、`WebAPI`、`ServicesAPI`、适配器类型及配置类型；配置模板运行时 helper 在 `@dsh-plugin/dsh-loader/config`。
+插件声明 `inject = ['dshLoader']` 后使用 `ctx.dshLoader`。根入口导出 `HostAPI`、`CordisContext`、`SettingsAPI`、`WebAPI`、`ServicesAPI`、`ShellFacade`、`SandboxFacade`、`ShellBaseOptions`、`ShellExecutorClass`、`ShellSpecLike`、`SandboxPolicyLike`、`ConfinedArgvLike`、适配器类型及配置类型；配置模板运行时 helper 在 `@dsh-plugin/dsh-loader/config`。
 
 | 入口 | 用途 |
 | --- | --- |
@@ -15,11 +15,92 @@
 | `sessions` | 按需初始化的会话快照、待发状态、排他历史替换与发送拦截；使用前等待 `ready` |
 | `registry` | tools、sandbox、permission presets 兼容 facade |
 | `llm` | createUserMessage、deepFreeze |
-| `dsh` | tools、timeout、credentials、subagent、compaction、llm 模块符号 |
+| `dsh` | tools、timeout、credentials、subagent、compaction、llm、subprocess 模块符号 |
+| `shell` | 执行器基类门面：平台词、本地执行器包名、归一化基类、`parseExitStatus`、`candidatePwshPaths` |
+| `sandbox` | 沙箱门面：升级词表、参数校验、审批、不可用错误、标记生成器、结果分类、`confine` |
 | `patch` | method/global/slot，返回 { dispose, active, original } |
 | `registerPackageAlias(from, to, ownerCtx?)` | Promise<disposer>；共享解析表，按注册 token 清理 |
 
 `version` 是 loader 版本，`dshVersion` 是当前宿主版本，`adapterVersion` 是选中的 patch。
+
+## shell 与 sandbox 门面
+
+第三方插件实现自己的 `ctx.shell` 时，需要继承宿主当次安装的本地执行器，才能沿用截止时间、输出上限、溢出文件和进程树终止。宿主在 `0.1.5 … 0.2.2` 之间改过两次接缝，门面把差异收在 `PatchMetadata.shell` 的 `seam` 字段里，插件只实现一个 `shellArgv(spec)` 钩子。
+
+| patch 系列 | `ShellExecutor` 抽象方法 | 本地执行器可覆写点 | `ctx.sandbox.confine` |
+|---|---|---|---|
+| `0.1.5`、`0.1.6` | `resolve` / `run` / `start` | `pwsh`: `protected argv(spec)`；`bash`: `protected runArgv` / `startArgv` | 0.1.5 同步、0.1.6 起 `Promise` |
+| `0.1.7`、`0.2.0`、`0.2.1`、`0.2.2` | `resolve` / `execute` | `protected executeArgv(spec, argvOrPrepare, onStarted?)` | `Promise` |
+
+```ts
+export interface ShellFacade {
+  /** 当前宿主的执行平台词（与 `ctx.subprocess.terminalEnvironment().platform` 同义）。 */
+  platform(): 'windows' | 'posix'
+  /** 该平台本地执行器包的导出名，用于诊断。 */
+  localPackage(): string
+  /**
+   * 归一化基类：返回一个可直接 `ctx.plugin()` 的执行器类。
+   * 它继承宿主自己的本地执行器（pwsh-local / bash-local），把三种接缝统一成一个钩子：
+   *   shellArgv(spec) => readonly string[]
+   * 返回 undefined 表示该宿主缺少本地执行器包或该 patch 未声明 shell 元数据，
+   * 调用方必须响亮报错。
+   */
+  base(options: ShellBaseOptions): ShellExecutorClass | undefined
+  /** `parseExitStatus`（`@deepseek-ai/dsh-shell` 模块级导出）。 */
+  parseExitStatus(text: string): { body: string; exitCode?: number; signal?: string }
+  /** `candidatePwshPaths`（`@deepseek-ai/dsh-pwsh-local`）。缺失时返回 []。 */
+  candidatePwshPaths(env?: NodeJS.ProcessEnv): string[]
+}
+
+export interface ShellBaseOptions {
+  /** 构建一次调用的完整 argv（含可执行文件本身）。 */
+  shellArgv(spec: ShellSpecLike): readonly string[]
+}
+```
+
+`base()` 生成的类必须：声明 `static inject = ['subprocess', 'sandbox', 'sandboxPolicy']`；`resolve(request)` 等于父类结果再补 `sandboxPolicy: request.sandboxPolicy ?? ctx.sandboxPolicy.resolve()`；`run`/`start`（老代）与 `execute`（新代）把 argv 换成 `options.shellArgv(spec)`，deadline、输出上限、kill、`onProcessDone` 全部沿用父类；结果与 `proc.sandbox` 都带 `mode`、`denied`、`enforcement`、`runnerFailed` 事实，语义与 `dsh-pwsh-sandbox` 一致。两种接缝的 argv 都只来自 `options.shellArgv`，父类的 `argv`/`runArgv`/`startArgv` 内置 argv 不再被调用。
+
+`sandbox` 把 `confine` 归一化为始终返回 Promise（0.1.5 的同步返回值也包成 Promise），`classify` 优先用宿主模块级导出，老版本缺 `classifyRunnerFailure` 时按规则字段自行计算，规则形状为 `{ allowedExitCodes?, informationalLines?, fatalSignatures }`。
+
+```ts
+export interface SandboxFacade {
+  /** 当前会话/部署可升级到的模式列表；缺失时 []。 */
+  escalationTargets(): readonly string[]
+  /** `validateEscalationArgs`；缺失时抛能力错误。 */
+  validateEscalationArgs(mode: unknown, justification: unknown): void
+  /** `approveEscalation`；缺失时抛能力错误。 */
+  approveEscalation(request: unknown, context: unknown): Promise<string>
+  /** `SandboxUnavailableError`；缺失时退回带 code 的 Error。 */
+  unavailableError(mode: string, detail: string): Error
+  /** 拒绝/提示标记生成器。 */
+  denialMarker(mode: string): string
+  escalationHintMarker(subject: string): string
+  /** 归一化的结果分类：等价于旧版三个模块级导出。 */
+  classify(input: { exitCode: number | null; stderr: string; signatures: readonly string[]; rules: readonly unknown[] }): { denied: boolean; runnerFailure?: string }
+  /** 包装 argv 的归一化入口：老版本同步结果也以 Promise 返回。 */
+  confine(argv: readonly string[], policy: unknown, signal?: AbortSignal): Promise<ConfinedArgvLike>
+}
+
+export interface ConfinedArgvLike {
+  argv: string[]
+  enforcement: string
+  denialSignatures: readonly string[]
+  runnerFailureRules: readonly unknown[]
+}
+```
+
+`@deepseek-ai/dsh-subprocess` 的 `SubprocessExecutableNotFoundError` 是模块级导出，插件用它区分候选不存在与提供方故障，因此放在 `dsh.subprocess.notFoundError` 上：
+
+```ts
+dsh.subprocess: {
+  /** 构造一个 `SubprocessExecutableNotFoundError` 形状的错误；缺失时返回带同名字段的 Error。 */
+  notFoundError(message: string): Error
+}
+```
+
+上游模块缺失时，`base` 返回 `undefined`（由调用方决定是否响亮失败），`escalationTargets` 返回 `[]`，`validateEscalationArgs`、`approveEscalation`、`denialMarker`、`escalationHintMarker` 抛能力不可用错误，`unavailableError` 退回带 `SANDBOX_UNAVAILABLE` code 的 Error，`classify` 用本地等价实现，`parseExitStatus` 返回原文，`candidatePwshPaths` 返回 `[]`。
+
+适配器声明 `PatchMetadata.shell`（`localPackage: { windows, posix }` 与 `seam: 'run-start' | 'execute'`）。`0.1.5`、`0.1.6` 为 `'run-start'`，其余为 `'execute'`，两代都用 `@deepseek-ai/dsh-pwsh-local` / `@deepseek-ai/dsh-bash-local`。门面只按 `seam` 分派，不认识具体版本号。
 
 ## 客户端
 

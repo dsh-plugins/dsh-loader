@@ -47,8 +47,26 @@ export interface PermissionPresetLike {
 /** The optional dsh modules the facades need, resolved once at boot. */
 export interface RegistryModules {
   agent?: Record<string, unknown>;
-  /** `@deepseek-ai/dsh-sandbox` — for `ESCALATION_TARGETS`. */
-  sandbox?: { ESCALATION_TARGETS?: readonly string[] };
+  /**
+   * `@deepseek-ai/dsh-sandbox` — the escalation vocabulary plus the module-level
+   * classification helpers the shell facade reuses, so a confining executor
+   * reports denials and runner failures in exactly the host's dialect.
+   */
+  sandbox?: {
+    ESCALATION_TARGETS?: readonly string[];
+    SandboxUnavailableError?: new (mode: string, detail?: string) => Error;
+    validateEscalationArgs?: (mode: unknown, justification: unknown) => void;
+    approveEscalation?: (request: unknown, approval: unknown) => Promise<string>;
+    sandboxDenialMarker?: (mode: string) => string;
+    escalationHintMarker?: (subject: string) => string;
+    matchesSignature?: (exitCode: number | null, stderr: string, signatures: readonly string[]) => boolean;
+    classifyRunnerFailure?: (
+      exitCode: number | null,
+      stderr: string,
+      rules: readonly unknown[],
+    ) => { detail: string } | undefined;
+    isRunnerSpawnFailure?: (error: unknown, runnerProgram: string | undefined, workdir: string) => boolean;
+  };
   /** `@deepseek-ai/dsh-permission-presets` — for `effectivePermissionPreset`. */
   permissionPresets?: { effectivePermissionPreset?: (events: readonly unknown[]) => string | undefined };
   /**
@@ -87,6 +105,27 @@ export interface RegistryModules {
   compaction?: { BasicCompactionEngine?: unknown };
   /** 宿主 AGENTS.md 规则上下文渲染器。 */
   agentInstructions?: { renderAgentInstructions?: unknown; renderWorkspaceContext?: unknown };
+  /** `@deepseek-ai/dsh-shell` — `parseExitStatus` is module-level, not on `ctx.shell`. */
+  shell?: {
+    parseExitStatus?: (text: string) => { body: string; exitCode?: number; signal?: string };
+  };
+  /**
+   * `@deepseek-ai/dsh-pwsh-local` — the Windows local executor class the shell
+   * facade extends, plus its executable probe.
+   */
+  pwshLocal?: {
+    PwshLocalExecutor?: new (ctx: any, config?: any) => any;
+    candidatePwshPaths?: (env?: NodeJS.ProcessEnv) => string[];
+  };
+  /** `@deepseek-ai/dsh-bash-local` — the POSIX local executor class. */
+  bashLocal?: { LocalBashExecutor?: new (ctx: any, config?: any) => any };
+  /**
+   * `@deepseek-ai/dsh-subprocess` — `SubprocessExecutableNotFoundError` lets a
+   * plugin tell "candidate missing" apart from "provider broken".
+   */
+  subprocess?: {
+    SubprocessExecutableNotFoundError?: new (message: string, options?: ErrorOptions) => Error;
+  };
 }
 
 /**
