@@ -146,9 +146,7 @@
     "client": {
       "platform": "web",
       "immediately": true,
-      "inject": [
-        "@deepseek-ai/dsh-client-ui-primitives"
-      ]
+      "inject": []
     }
   },
   "license": "LGPL-3.0-only"
