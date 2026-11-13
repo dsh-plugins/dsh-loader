@@ -33,6 +33,13 @@ export interface DshLoaderUi extends UiAPI {
   config: ConfigDialogsAPI;
   /** Read the shell's sidebar layout state, when the anchor resolves. */
   layoutFrame(): LayoutFrameState | undefined;
+  /**
+   * Read a client-side cordis service by name (e.g. `slots`, `sessions`).
+   * Proxied from `window.__dshLoader__.services` when available.
+   */
+  services?: {
+    get(name: string): unknown;
+  };
 }
 
 /**

@@ -171,6 +171,12 @@ export function apply(ctx: ClientContextLike): void {
   installConversationEventsCompat(ctx);
 
   const currentUi = createUi({ config: dialogs });
+  // Expose cordis service reads through the UI facade so plugins can reach
+  // built-in services (e.g. `slots`, `sessions`) without declaring their own
+  // inject entries, which would change their activation ordering.
+  if (api !== undefined && api.services !== undefined) {
+    (currentUi as unknown as Record<string, unknown>).services = api.services;
+  }
   ui = currentUi;
   resources.add(() => {
     currentUi.destroy();
@@ -179,11 +185,14 @@ export function apply(ctx: ClientContextLike): void {
   if (api !== undefined) (api as Record<string, unknown>).ui = currentUi;
   else if (win.__dshLoader__ !== undefined) win.__dshLoader__.ui = currentUi;
 
-  // Ordered access for consumers that inject the service. Publication waits
-  // for the connection.api bridge: consumers gated on dshLoaderUi read
-  // `connection.api` during their own apply, so the legacy RPC proxy must be
-  // in place before the service appears (a synchronous no-op on hosts that
-  // already carry `connection.api`).
-  installConnectionApiCompat(ctx, () => { if (!resources.disposed) ctx.provide?.(UI_SERVICE, currentUi); });
+  // The service itself is a pure client-side object with no host
+  // dependencies: publish it synchronously so dependents gated on
+  // `dshLoaderUi` activate in the same pass as dsh-loader. The legacy
+  // `connection.api` proxy only bridges RPC calls made after activation, so
+  // it installs independently and must not gate service publication (a host
+  // without the remote faces otherwise holds every consumer for the 15 s
+  // fallback window, observed as "web boot: N entries did not activate").
+  ctx.provide?.(UI_SERVICE, currentUi);
+  installConnectionApiCompat(ctx, () => {});
   } catch (error) { resources.dispose(); throw error; }
 }
