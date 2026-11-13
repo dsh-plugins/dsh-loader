@@ -8,6 +8,7 @@ import type { ConfigDialogsAPI } from './config-dialogs.js';
 import { ConfigModelsContext } from './model-select.js';
 import type { ConfigModelSource } from './config-model-source.js';
 import { ConfigToast } from './config-toast.js';
+import { configListFor } from './config-list.js';
 
 class PanelBoundary extends React.Component<{ component: React.ComponentType<any>; children: React.ReactNode }, { error: string; component?: React.ComponentType<any> }> {
   override state = { error: '', component: this.props.component };
@@ -131,9 +132,11 @@ export function ConfigCard({ view, client, dialogs, layout = 'settings', registe
     {layout === 'settings' && <>{feedback}{actions}</>}
   </form>{view.template.panels?.filter(panel => !embedded.has(panel.id)).map(panel => renderPanel(panel.id))}</div></details>;
 }
-export function ConfigPage({ client, ids, dialogs, loadModels, layout = 'settings' }: { client: ConfigClient; ids?: string[]; dialogs?: ConfigDialogsAPI; loadModels?: ConfigModelSource; layout?: BootDescriptor['capabilities']['configUI'] }): React.ReactElement {
-  const [views, setViews] = React.useState<ConfigView[]>([]);
-  const [error, setError] = React.useState('');
+export function ConfigPage({ client, ids, groupKey, dialogs, loadModels, layout = 'settings' }: { client: ConfigClient; ids?: string[]; groupKey?: string; dialogs?: ConfigDialogsAPI; loadModels?: ConfigModelSource; layout?: BootDescriptor['capabilities']['configUI'] }): React.ReactElement {
+  const list = configListFor(client);
+  const { views, status, error } = React.useSyncExternalStore(list.subscribe, list.getSnapshot);
+  const visible = views.filter(({ template }) => (!ids || ids.includes(template.id))
+    && (!groupKey || groupKey === template.packageName + (template.rowId ? `#${template.rowId}` : '')));
   const [notice, setNotice] = React.useState<{ id: number; text: string; success: boolean }>();
   const notices = React.useRef(0), saves = React.useRef(new Map<string, () => ConfigSaveAction>());
   const savingAll = React.useRef<Promise<void>>();
@@ -144,7 +147,7 @@ export function ConfigPage({ client, ids, dialogs, loadModels, layout = 'setting
     saves.current.set(id, current);
     return () => { if (saves.current.get(id) === current) { saves.current.delete(id); } };
   }, []);
-  const onSaved = React.useCallback(() => { if (!savingAll.current) { notify('配置已保存', true); } }, [notify]);
+  const onSaved = React.useCallback(() => { list.refresh(); if (!savingAll.current) { notify('配置已保存', true); } }, [list, notify]);
   const changedCards = () => [...saves.current].map(([id, current]) => ({ id, action: current() })).filter(entry => entry.action.dirty);
   const saveAll = () => {
     if (savingAll.current) { saveQueued.current = true; return; }
@@ -161,6 +164,7 @@ export function ConfigPage({ client, ids, dialogs, loadModels, layout = 'setting
         saveQueued.current = false; batch = changedCards();
       }
       const saved = [...outcomes.values()].filter(Boolean).length, failed = outcomes.size - saved;
+      if (saved) { list.refresh(); }
       const text = failed ? `已保存 ${saved} 项配置，${failed} 项保存失败，请检查错误提示`
         : changedCards().length ? `本次已保存 ${saved} 项配置，仍有新的修改未保存` : `已保存全部 ${saved} 项配置`;
       notify(text, failed === 0);
@@ -182,46 +186,47 @@ export function ConfigPage({ client, ids, dialogs, loadModels, layout = 'setting
     window.addEventListener('blur', release);
     return () => { release(); document.removeEventListener('keydown', repeat, true); document.removeEventListener('keyup', keyup, true); window.removeEventListener('blur', release); };
   }, []);
-  React.useEffect(() => {
-    let active = true, generation = 0;
-    const refresh = () => { const current = ++generation; void client.list().then(value => { if (active && current === generation) { setViews(value); setError(''); } }, cause => { if (active && current === generation) setError(String(cause)); }); };
-    const off = client.subscribe(refresh); refresh();
-    return () => { active = false; off(); };
-  }, [client]);
-  return <ConfigModelsContext.Provider value={loadModels}><div className="dshl-config" aria-keyshortcuts="Control+S" onKeyDownCapture={keydown}><style data-plugin="@dsh-plugin/dsh-loader" data-plugin-css="@dsh-plugin/dsh-loader/ui/config.css">{CONFIG_CSS}</style>{error && <p role="alert">{error}</p>}{views.filter(view => !ids || ids.includes(view.template.id)).map(view => <ConfigCard key={view.template.id} view={view} client={client} dialogs={dialogs} layout={layout} registerSave={registerSave} onSaved={onSaved}/>)}{!views.length && !error && <p>暂无已注册的插件配置。</p>}{notice && <ConfigToast key={notice.id} text={notice.text} success={notice.success} onDone={() => setNotice(current => current?.id === notice.id ? undefined : current)}/>}</div></ConfigModelsContext.Provider>;
+  return <ConfigModelsContext.Provider value={loadModels}><div className="dshl-config" aria-keyshortcuts="Control+S" onKeyDownCapture={keydown}>
+    <style data-plugin="@dsh-plugin/dsh-loader" data-plugin-css="@dsh-plugin/dsh-loader/ui/config.css">{CONFIG_CSS}</style>
+    {status === 'loading' && <p role="status">{visible.length ? '正在更新插件配置…' : '正在加载插件配置…'}</p>}
+    {status === 'error' && <div role="alert"><p>插件配置加载失败：{error}</p><button type="button" onClick={list.refresh}>重试加载配置</button></div>}
+    {visible.map(view => <ConfigCard key={view.template.id} view={view} client={client} dialogs={dialogs} layout={layout} registerSave={registerSave} onSaved={onSaved}/>)}
+    {status === 'ready' && !visible.length && <p>暂无已注册的插件配置。</p>}
+    {notice && <ConfigToast key={notice.id} text={notice.text} success={notice.success} onDone={() => setNotice(current => current?.id === notice.id ? undefined : current)}/>}
+  </div></ConfigModelsContext.Provider>;
 }
-/** All slot registration is loader-owned; plugins supply only templates. */
+/** 由 loader 统一注册配置插槽，入口与页面订阅同一份配置快照。 */
 export function installConfigUI(ctx: any, client: ConfigClient, boot: BootDescriptor, dialogs?: ConfigDialogsAPI, loadModels?: ConfigModelSource): () => void {
-  let disposed = false;
-  let generation = 0;
   const registrations = new Map<string, () => void>();
   const slots = ctx.get?.('slots');
-  if (!slots) return () => {};
-  const add = (name: string, id: string, ids?: string[]) => {
-    const off = slots.inject(name, () => slots.register({ name, id: `dshloader:${id}`, ...(name !== 'settings.section' ? { key: id } : {}), label: () => '插件配置', order: 40, inject: () => ({}) }, () => <ConfigPage client={client} ids={ids} dialogs={dialogs} loadModels={loadModels} layout={boot.capabilities.configUI}/>));
+  if (!slots) { return () => {}; }
+  const list = configListFor(client);
+  const add = (name: string, id: string) => {
+    const off = slots.inject(name, () => slots.register({ name, id: `dshloader:${id}`, ...(name !== 'settings.section' ? { key: id } : {}), label: () => '插件配置', order: 40, inject: () => ({}) }, () => <ConfigPage client={client} groupKey={name === 'settings.section' ? undefined : id} dialogs={dialogs} loadModels={loadModels} layout={boot.capabilities.configUI}/>));
     registrations.set(id, typeof off === 'function' ? off : () => {});
   };
-  const sync = async () => {
-    const token = ++generation;
-    try {
-      const views = await client.list(); if (disposed || generation !== token) return;
-      const groups = new Map<string, { slot: string; ids: string[] }>();
-      for (const { template } of views) {
-        const key = template.packageName + (template.rowId ? `#${template.rowId}` : '');
-        const group = groups.get(key) ?? { slot: template.rowId ? 'plugins.row.config' : 'plugins.bundle.config', ids: [] };
-        group.ids.push(template.id); groups.set(key, group);
-      }
-      // Replace only when the registration set changes, never on ordinary saves.
-      const signature = JSON.stringify([...groups]);
-      if (signature === lastSignature) return;
-      lastSignature = signature;
-      for (const off of registrations.values()) off(); registrations.clear();
-      for (const [key, group] of groups) add(group.slot, key, group.ids);
-    } catch (error) { if (!disposed) console.error('[dshloader] config UI registration failed', error); }
+  const sync = () => {
+    const snapshot = list.getSnapshot();
+    if (boot.capabilities.configUI !== 'plugins') { return; }
+    if (snapshot.status === 'error') {
+      console.error('[dshloader] config UI registration failed', snapshot.error);
+      return;
+    }
+    if (snapshot.status !== 'ready') { return; }
+    const groups = new Map<string, string>();
+    for (const { template } of snapshot.views) {
+      const key = template.packageName + (template.rowId ? `#${template.rowId}` : '');
+      groups.set(key, template.rowId ? 'plugins.row.config' : 'plugins.bundle.config');
+    }
+    for (const [key, release] of registrations) {
+      if (!groups.has(key)) { release(); registrations.delete(key); }
+    }
+    for (const [key, slot] of groups) {
+      if (!registrations.has(key)) { add(slot, key); }
+    }
   };
-  let lastSignature = '';
-  if (boot.capabilities.configUI === 'settings') add('settings.section', 'plugin-config');
-  const off = boot.capabilities.configUI === 'plugins' ? client.subscribe(() => { void sync(); }) : () => {};
-  if (boot.capabilities.configUI === 'plugins') void sync();
-  return () => { disposed = true; off(); for (const release of registrations.values()) release(); registrations.clear(); };
+  if (boot.capabilities.configUI === 'settings') { add('settings.section', 'plugin-config'); }
+  const off = list.subscribe(sync);
+  sync();
+  return () => { off(); for (const release of registrations.values()) { release(); } registrations.clear(); };
 }

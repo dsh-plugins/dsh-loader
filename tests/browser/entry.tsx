@@ -13,11 +13,25 @@ const client = createConfigClient(fetch.bind(window), url => new EventSource(url
 const dialogs = createConfigDialogs(client), releases: (() => void)[] = [];
 applyDialogExample({ effect(fn) { const off = fn(); if (off) releases.push(off); }, dshLoaderUi: { config: dialogs } });
 const root = createRoot(document.getElementById('root')!);
+const delayedDetail = new URLSearchParams(location.search).has('delayedDetail');
+function DetailFixture({ Component }: { Component: React.ComponentType }): React.ReactElement {
+  const [open, setOpen] = React.useState(false);
+  const [description, setDescription] = React.useState('描述加载中…');
+  React.useEffect(() => {
+    if (!open) { return; }
+    const controller = new AbortController();
+    void fetch('/api/fixture/description', { signal: controller.signal }).then(response => response.text()).then(setDescription, cause => {
+      if (!controller.signal.aborted) { setDescription(String(cause)); }
+    });
+    return () => controller.abort();
+  }, [open]);
+  return open ? <><p data-fixture-description>{description}</p><Component/></> : <button type="button" onClick={() => setOpen(true)}>打开插件详情</button>;
+}
 const slots = {
   inject(_name: string, register: () => unknown) { register(); return () => root.render(null); },
   register(options: { name: string }, Component: React.ComponentType) {
     document.getElementById('location')!.textContent = options.name === 'settings.section' ? '更多 → 设置 → 插件配置' : '插件 → 示例插件 → 配置';
-    root.render(<Component/>);
+    root.render(delayedDetail ? <DetailFixture Component={Component}/> : <Component/>);
   },
 };
 const loadModels: ConfigModelSource = async signal => {

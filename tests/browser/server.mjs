@@ -30,7 +30,10 @@ const route = [];
 const off = installConfigBridge({ register(prefix, handler) { route.push({ prefix, handler }); return () => {}; } }, store, () => true);
 const server = await createServer({ configFile: false, root: process.cwd(), server: { host: '127.0.0.1', port: 4187, strictPort: true }, esbuild: { jsx: 'automatic' }, plugins: [arcoStyle(), { name: 'config-fixture', configureServer(server) {
   server.middlewares.use((req, res, next) => {
-    if (req.url?.startsWith('/api/dshloader/config')) route[0].handler(req, res);
+    if (req.url === '/api/fixture/description') {
+      const timer = setTimeout(() => { res.setHeader('content-type', 'text/plain; charset=utf-8'); res.end('描述已加载'); }, 30000);
+      res.on('close', () => clearTimeout(timer));
+    } else if (req.url?.startsWith('/api/dshloader/config')) route[0].handler(req, res);
     else next();
   });
 } }] });
