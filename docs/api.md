@@ -42,6 +42,9 @@ export interface ShellFacade {
    * 归一化基类：返回一个可直接 `ctx.plugin()` 的执行器类。
    * 它继承宿主自己的本地执行器（pwsh-local / bash-local），把三种接缝统一成一个钩子：
    *   shellArgv(spec) => readonly string[]
+   * 生成的类自带 `sandboxMode` getter（读 `ctx.sandboxPolicy`），因为上游
+   * `ShellExecutor` 的该 getter 恒为 `undefined`，而 0.2.2 起
+   * `dsh-permission-presets` 要求它非空才肯装配。
    * 返回 undefined 表示该宿主缺少本地执行器包或该 patch 未声明 shell 元数据，
    * 调用方必须响亮报错。
    */

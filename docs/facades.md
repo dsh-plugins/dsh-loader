@@ -47,7 +47,11 @@ export class ExampleExecutor extends Base {
 }
 ```
 
-`Base` 已经处理了三件事：`static inject` 包含 `subprocess`、`sandbox`、`sandboxPolicy`；`resolve()` 用 `ctx.sandboxPolicy.resolve()` 补齐 `sandboxPolicy`；`run`/`start`（0.1.5、0.1.6）或 `execute`（0.1.7 起）按当前接缝把 argv 换成 `shellArgv` 的结果，并经过 `ctx.sandbox.confine`（完整访问模式直通），把 `mode`、`denied`、`enforcement`、`runnerFailed` 写到结果与 `proc.sandbox` 上。插件不要覆写父类的 `argv`/`runArgv`/`startArgv` 去改 argv，也不要在自己的代码里判断宿主版本。
+`Base` 已经处理了四件事：`static inject` 包含 `subprocess`、`sandbox`、`sandboxPolicy`；`resolve()` 用 `ctx.sandboxPolicy.resolve()` 补齐 `sandboxPolicy`；`run`/`start`（0.1.5、0.1.6）或 `execute`（0.1.7 起）按当前接缝把 argv 换成 `shellArgv` 的结果，并经过 `ctx.sandbox.confine`（完整访问模式直通），把 `mode`、`denied`、`enforcement`、`runnerFailed` 写到结果与 `proc.sandbox` 上；`sandboxMode` getter 报告 `ctx.sandboxPolicy` 解析出的模式。插件不要覆写父类的 `argv`/`runArgv`/`startArgv` 去改 argv，也不要在自己的代码里判断宿主版本。
+
+`sandboxMode` 不是可选细节：上游 `ShellExecutor` 的 getter 恒为 `undefined`，只有随宿主一起装配的沙箱执行器才覆写它；从 0.2.2 起 `dsh-permission-presets` 在构造时要求 `ctx.shell.sandboxMode` 有值，否则整个 `permission` entry 抛错退出。插件继承 `Base` 就自动拿到正确的模式，**不要**再用一个返回 `undefined` 的 getter 覆盖它。
+
+预算字段的读取方式在 0.1.7 起改成响应式引用（`config.timeoutMs.get()`）。插件自己的配置 schema 照常声明普通值即可，把要交给父类的那份子集过一遍 `Base.Config`（schemastery schema，同时是 `~standard` 校验器）再 `super()`，它会产出该代宿主需要的形状：0.1.5/0.1.6 得到普通值，0.1.7 起得到引用。
 
 `loader.shell.platform()` 返回执行世界报告的平台词（`ctx.subprocess.terminalEnvironment()` 可用时以它为准，否则取 `process.platform`），`loader.shell.localPackage()` 返回该平台对应的执行器包名，两者都可用于诊断输出。`parseExitStatus` 与 `candidatePwshPaths` 转发宿主模块级导出，模块缺失时分别返回原文与 `[]`。
 
