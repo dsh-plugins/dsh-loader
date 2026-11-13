@@ -57,6 +57,25 @@ if(w[F])return;
 var A=${table};
 var ids=Object.keys(A);
 function reg(loader){
+${boot && ['0.2.2-rc.1', '0.2.2-rc.2'].includes(boot.dshVersion) ? `var wrappedLoad;
+function wrapLoad(){
+if(loader.load===wrappedLoad)return;
+var load=loader.load;
+wrappedLoad=function(handoff){
+if(handoff.id!=="@deepseek-ai/dsh-client-ui-chat")return load.call(this,handoff);
+var factory=handoff.factory;
+return load.call(this,Object.assign({},handoff,{factory:function(require){
+var mod=factory(require);
+return require("@dsh-plugin/dsh-loader").wrapSessionChatPlugin(mod);
+}}));
+};
+loader.load=wrappedLoad;
+}
+wrapLoad();
+if(typeof loader.create==="function"){
+var create=loader.create;
+loader.create=function(){var result=create.apply(this,arguments);wrapLoad();return result;};
+}` : ''}
 for(var i=0;i<ids.length;i++){
 var id=ids[i];
 loader.load({id:id,factory:function(t,a){return function(require){

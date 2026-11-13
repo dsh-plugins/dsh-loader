@@ -1,4 +1,6 @@
 export * from './ui/client-compat.js';
+export * from './session-client.js';
+import { wrapSessionChatPlugin } from './session-client.js';
 import { createConfigClient } from './config-client.js';
 import { installConfigUI } from './ui/config-form.js';
 import { createConfigModelSource } from './ui/config-model-source.js';
@@ -136,6 +138,13 @@ export function apply(ctx: ClientContextLike): void {
   const api = installClient({
     window: win as never,
     clientCtx: ctx as never,
+    decorateModule: (id, module) => {
+      if (id === '@deepseek-ai/dsh-client-ui-chat' && win.__DSHLOADER_BOOT__
+        && ['0.2.2-rc.1', '0.2.2-rc.2'].includes((win.__DSHLOADER_BOOT__ as { dshVersion: string }).dshVersion)) {
+        return wrapSessionChatPlugin(module as Parameters<typeof wrapSessionChatPlugin>[0]);
+      }
+      return module;
+    },
     effect: typeof ctx.effect === 'function' ? (fn) => ctx.effect!(fn) : undefined,
   });
   if (api) resources.add(api.dispose);

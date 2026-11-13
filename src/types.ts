@@ -80,6 +80,8 @@ export interface HostAPI {
   dshVersion?: string;
   adapterVersion?: string;
   config: import('./config.js').ConfigAPI;
+  /** 按需初始化的会话生命周期与官方日志适配。 */
+  readonly sessions: import('./sessions.js').SessionsAPI;
   settings: SettingsAPI;
   web: WebAPI;
   services: ServicesAPI;

@@ -12,6 +12,7 @@
 | `settings` | 宿主设置 describe/update/replace/mutate；旧 register/installSection 按实际宿主能力提供 |
 | `web` | prefix/exact、GET/POST/PUT/PATCH/DELETE、middleware、WebSocket upgrade，返回 disposer |
 | `services` | get 与单跳 alias |
+| `sessions` | 按需初始化的会话快照、待发状态、排他历史替换与发送拦截；使用前等待 `ready` |
 | `registry` | tools、sandbox、permission presets 兼容 facade |
 | `llm` | createUserMessage、deepFreeze |
 | `dsh` | tools、timeout、credentials、subagent、compaction、llm 模块符号 |

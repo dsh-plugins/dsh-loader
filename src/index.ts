@@ -206,6 +206,8 @@ export async function apply(ctx: CordisContext, entryConfig?: Partial<LoaderConf
 }
 
 export { LOADER_VERSION };
+export { SessionHostError } from './sessions.js';
+export type { SessionsAPI, SessionSnapshot, SessionStatus, SessionPendingMessage, SessionChange, SessionExclusive } from './sessions.js';
 
 export type { HostAPI, CordisContext, SettingsAPI, WebAPI, ServicesAPI, HostAdapter, HostAdapterConfig, AdapterFactory } from './types.js';
 export type { ConfigAPI, ConfigHandle, ConfigTemplate, ConfigField, ConfigSnapshot } from './config.js';

@@ -1,4 +1,5 @@
 import { ConfigStore } from './services/config.js';
+import { createSessionsAPI, type SessionsAPI } from './sessions.js';
 import { ownedScope, type ResourceOwner } from './lifecycle.js';
 // DshLoaderHostAPI construction (design.md §4.1 / §4.4).
 //
@@ -85,8 +86,20 @@ export function createHostAPI(opts: {
     return scope.add(await installHostPackageAliases({ [oldName]: newName }));
   };
 
+  let sessions: SessionsAPI | undefined;
   return {
     ...base,
+    get sessions() {
+      if (!sessions) {
+        const loader = ctx.get('loader');
+        sessions = createSessionsAPI(ctx, {
+          version: dshVersion,
+          importModule: loader?.import?.bind(loader),
+        });
+        resources.add(() => sessions?.dispose());
+      }
+      return sessions;
+    },
     config: opts.configStore ?? new ConfigStore(undefined),
     settings,
     web,

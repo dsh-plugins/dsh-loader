@@ -222,6 +222,8 @@ interface InstallClientOpts {
    * environments, where patches simply live for the process.
    */
   effect?: (fn: () => (() => void) | void) => unknown;
+  /** 在模块公开入口加载时安装版本适配，不改变其他模块。 */
+  decorateModule?: (id: string, module: unknown) => unknown;
 }
 
 const CLIENT_STATE_KEY = Symbol.for('dshloader.client.v2');
@@ -232,6 +234,7 @@ interface ClientState {
   load?: PatchHandle;
   fetch?: () => void;
   apis: Set<ReturnType<typeof createClientAPI>>;
+  decorators?: Set<(id: string, module: unknown) => unknown>;
 }
 /** The host selects the adapter; every install shares one alias table. */
 export function installClient(opts: InstallClientOpts = {}) {
@@ -244,6 +247,11 @@ export function installClient(opts: InstallClientOpts = {}) {
   const resources = new ResourceScope();
   opts.effect?.(() => resources.dispose);
   state.refs++;
+  if (opts.decorateModule) {
+    const decorators = state.decorators ??= new Set();
+    decorators.add(opts.decorateModule);
+    resources.add(() => { decorators.delete(opts.decorateModule!); });
+  }
   resources.add(() => {
     if (--state.refs === 0) { state.load?.dispose(); state.fetch?.(); state.fetch = undefined; }
   });
@@ -254,7 +262,13 @@ export function installClient(opts: InstallClientOpts = {}) {
     if (!loader || typeof loader.load !== 'function') throw new Error('dshloader: module loader unavailable');
     if (!state.load?.active) {
       state.load = patchSlot<typeof loader.load>(loader, 'load', original => function(handoff) {
-        return original.call(loader, { ...handoff, factory: require => handoff.factory(spec => require(state.aliases.values.get(spec) ?? spec)) });
+        return original.call(loader, { ...handoff, factory: require => {
+          let module = handoff.factory(spec => require(state.aliases.values.get(spec) ?? spec));
+          for (const decorate of state.decorators ?? []) {
+            module = decorate(handoff.id, module);
+          }
+          return module;
+        } });
       }, { id: 'dshloader:module-load' });
     }
     const expose = boot.exposeAllNamespaces;
