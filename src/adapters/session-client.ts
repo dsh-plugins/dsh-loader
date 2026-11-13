@@ -16,8 +16,11 @@ interface Slots {
 interface RendererProps {
   sessionId: string;
   messageId?: string;
+  turnProcess?: { hasContent: boolean };
+  t?: (key: string, ...args: unknown[]) => string;
   node?: {
     kind: string;
+    location?: { kind: string; turn?: { end?: { data: { reason: { kind: string } } } } };
     data: {
       messageId?: string;
       content?: readonly Record<string, unknown>[];
@@ -88,12 +91,30 @@ export function createSessionAdapter(ctx: SessionClientContext): SessionClient {
   const publish = () => { for (const listener of listeners) { listener(); } };
   const originalRegister = slots.register;
   function register(this: Slots, options: SlotOptions, Component: ComponentType<RendererProps>): () => void {
-    if (options.name !== 'conversation.chat.node' || !messageKeys.has(options.key ?? '')) {
+    if (options.name !== 'conversation.chat.node' || (!messageKeys.has(options.key ?? '') && options.key !== 'turn-process')) {
       return originalRegister.call(this, options, Component);
     }
     function Message(props: RendererProps): ReactNode {
       const registered = useSyncExternalStore(subscribe, getExtensions, getExtensions);
       const node = props.node;
+      if (node?.kind === 'turn-process' && node.location?.turn?.end?.data.reason.kind === 'forked') {
+        const labels = registered.find(extension => extension.forkedTurnLabels)?.forkedTurnLabels;
+        if (labels && props.turnProcess?.hasContent === false) {
+          return null;
+        }
+        if (labels && props.t) {
+          const translate = props.t;
+          return createElement(Component, { ...props, t: (key: string, ...args: unknown[]) => {
+            if (key === 'message.turnProcess.worked') {
+              return labels.label;
+            }
+            if (key === 'message.turnProcess.took') {
+              return labels.duration;
+            }
+            return translate(key, ...args);
+          } });
+        }
+      }
       const assistant = node?.kind === 'assistant-step';
       const messageId = assistant ? node?.data.finalNode?.messageId : node?.data.messageId;
       let rendered: ReactNode = createElement(Component, props);

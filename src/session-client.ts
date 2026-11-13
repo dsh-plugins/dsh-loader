@@ -39,10 +39,12 @@ export interface SessionMessageProps {
   original: ReactNode;
 }
 
-/** 完整包裹官方消息组件，可在编辑期间替换正文并追加父节点分支导航。 */
+/** 完整包裹官方消息组件，可在编辑期间替换正文并追加同级版本导航。 */
 export interface SessionMessageExtension {
   id: string;
   Message: ComponentType<SessionMessageProps>;
+  /** 截断轮次有处理内容时使用这组标题，无内容时省略提示。 */
+  forkedTurnLabels?: { label: string; duration: string };
 }
 
 /** 插件使用的会话客户端能力，官方版本差异集中在 adapter 中。 */

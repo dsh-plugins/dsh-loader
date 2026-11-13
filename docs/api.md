@@ -29,6 +29,8 @@
 
 `config` 客户端提供 `list/read/update/reset/subscribe/dispose`。表单使用 loader 自带客户端，不要求插件编写浏览器配置逻辑。客户端提交必须携带 expectedRevision，密码遮蔽值不能当明文使用。
 
+会话扩展通过 `getSessionClient(ctx).registerMessageExtension({ id, Message, forkedTurnLabels? })` 注册。`forkedTurnLabels` 可提供本地化的 `label` 和 `duration` 标题，后者用于拼接官方用时。启用后，官方原因是 `forked` 的轮次改用这组标题，`turnProcess.hasContent` 为 `false` 时省略提示。有工具、思考或其他处理内容的轮次保留官方展开行为和完整日志；扩展注销后恢复官方标题。
+
 ## 稳定模块子路径
 
 宿主：`tools`、`llm`、`agent`、`settings`、`timeout`、`subagent`、`credentials`、`compaction-basic`，分别有 import/require 出口。实际可用符号受所选 patch 和已安装模块能力约束，缺失时报明确错误。新的跨版本业务优先使用 HostAPI facade。
