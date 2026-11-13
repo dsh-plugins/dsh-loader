@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Plugin loader",
+    "description": "Version-aware runtime compatibility layer that decouples third-party plugins from DSH internal service names, module paths, and RPC details, and renders their configuration forms."
+  }
+}

@@ -70,7 +70,9 @@
     "./config": {
       "types": "./dist/config.d.ts",
       "default": "./dist/config.js"
-    }
+    },
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
   },
   "bin": {
     "dshloader": "./bin/dshloader.mjs"
@@ -87,7 +89,9 @@
     "LICENSE",
     "README.zh_CN.md",
     "docs",
-    "examples/config-plugin"
+    "examples/config-plugin",
+    "locale",
+    "icon.svg"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.client.types.json && tsdown --config tsdown.client.config.mjs",
