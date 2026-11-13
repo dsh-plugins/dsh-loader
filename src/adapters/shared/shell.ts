@@ -426,6 +426,28 @@ function requiredSandboxPolicy(spec: ShellSpecLike): SandboxPolicyLike {
   return policy;
 }
 
+/**
+ * The mode a generated executor confines under.
+ *
+ * `ShellExecutor.sandboxMode` answers `undefined` on every release, because the
+ * shipped sandboxing executors override it themselves. A generated class
+ * subclasses the *local* executor, so it would inherit that empty answer — and
+ * from 0.2.2 on `dsh-permission-presets` refuses to compose at all unless
+ * `ctx.shell.sandboxMode` names a mode. The deployment policy is the same fact
+ * `SandboxPwshExecutor` reports, so it is read from there rather than guessed.
+ * @param ctx - the executor's context.
+ * @returns the configured default mode, or undefined when the service is absent.
+ */
+function sandboxModeOf(ctx: CordisContext): string | undefined {
+  const service = ctx.get('sandboxPolicy') as
+    | { defaultMode?: unknown; resolve?: () => { mode?: unknown } }
+    | undefined;
+  if (typeof service?.defaultMode === 'string') return service.defaultMode;
+  if (typeof service?.resolve !== 'function') return undefined;
+  const resolved = service.resolve();
+  return typeof resolved?.mode === 'string' ? resolved.mode : undefined;
+}
+
 /** Resolve the deployment policy from `ctx.sandboxPolicy`; a missing service fails loudly. */
 function resolveSandboxPolicy(ctx: CordisContext): SandboxPolicyLike {
   const policy = ctx.get('sandboxPolicy') as { resolve?: () => SandboxPolicyLike } | undefined;
@@ -586,6 +608,17 @@ function createExecutorClass(opts: {
 
       private readonly processFacts = new Map<unknown, ProcessConfinementFacts>();
 
+      /**
+       * The mode this executor confines under.
+       *
+       * `ShellExecutor` answers `undefined` and the shipped sandboxing executors
+       * override it; a class extending the *local* executor would otherwise claim
+       * "does not confine", which 0.2.2+ treats as a composition error.
+       */
+      get sandboxMode(): string | undefined {
+        return sandboxModeOf(this.ctx);
+      }
+
       // The superclass's execute() still calls this.argv(spec); overriding it
       // guarantees every inherited path uses the plugin's argv and never falls
       // back to the host's own pwsh/bash invocation.
@@ -656,6 +689,11 @@ function createExecutorClass(opts: {
     static inject = ['subprocess', 'sandbox', 'sandboxPolicy'];
 
     private readonly processFacts = new Map<unknown, ProcessConfinementFacts>();
+
+    /** The mode this executor confines under; see the execute seam's own getter. */
+    get sandboxMode(): string | undefined {
+      return sandboxModeOf(this.ctx);
+    }
 
     protected argv(spec: ShellSpecLike): string[] {
       return [...shellArgv(spec)];

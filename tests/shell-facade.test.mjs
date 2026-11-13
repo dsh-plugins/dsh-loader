@@ -331,6 +331,40 @@ test('run-start seam: a provider rejection whose error names the runner sets run
   });
 });
 
+test('both seams report the deployment mode as sandboxMode, which 0.2.2+ requires before it composes', () => {
+  // Upstream `ShellExecutor.sandboxMode` answers undefined and only the shipped
+  // sandboxing executors override it. A generated class extends the *local*
+  // executor, and from 0.2.2 on dsh-permission-presets refuses to compose unless
+  // ctx.shell.sandboxMode names a mode, so inheriting that empty answer breaks
+  // the whole boot rather than one command.
+  for (const [seam, metadata, base] of [
+    ['execute', EXECUTE_METADATA, makeExecuteBase()],
+    ['run-start', RUN_START_METADATA, makeRunStartBase()],
+  ]) {
+    const shell = createShellFacade({ ctx: makeCtx(), modules: makeModules({ base }), metadata });
+    const executor = new (shell.base({ shellArgv: () => ['x'] }))(makeCtx(), {});
+    assert.equal(executor.sandboxMode, 'workspace-write', `${seam}: the deployment mode is the executor's mode`);
+  }
+
+  // A runtime with no sandboxPolicy service answers undefined rather than
+  // inventing a mode: claiming confinement it cannot apply would be worse than
+  // the composition error.
+  const bare = { get: () => undefined, logger: { warn() {} } };
+  const shell = createShellFacade({ ctx: bare, modules: makeModules({ base: makeExecuteBase() }), metadata: EXECUTE_METADATA });
+  const executor = new (shell.base({ shellArgv: () => ['x'] }))(bare, {});
+  assert.equal(executor.sandboxMode, undefined);
+
+  // `defaultMode` is what upstream reads, but a facade offering only `resolve()`
+  // must not lose the fact: the mode is recovered from the resolved policy.
+  const resolveOnly = {
+    get: name => (name === 'sandboxPolicy' ? { resolve: () => ({ mode: 'read-only', workspaceRoot: '/w' }) } : undefined),
+    logger: { warn() {} },
+  };
+  const resolvedOnly = createShellFacade({ ctx: resolveOnly, modules: makeModules({ base: makeExecuteBase() }), metadata: EXECUTE_METADATA });
+  const other = new (resolvedOnly.base({ shellArgv: () => ['x'] }))(resolveOnly, {});
+  assert.equal(other.sandboxMode, 'read-only');
+});
+
 test('execute seam: argv comes from shellArgv, resolve stamps sandboxPolicy, and both the result and the process carry the sandbox facts', async () => {
   const confine = makeConfine();
   const ctx = makeCtx({ sandbox: confine.provider });
