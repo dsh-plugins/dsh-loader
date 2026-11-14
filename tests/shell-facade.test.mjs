@@ -370,7 +370,7 @@ test('execute seam: argv comes from shellArgv, resolve stamps sandboxPolicy, and
   const ctx = makeCtx({ sandbox: confine.provider });
   const shell = createShellFacade({ ctx, modules: makeModules({ base: makeExecuteBase() }), metadata: EXECUTE_METADATA });
 
-  assert.equal(shell.localPackage(), WINDOWS_PACKAGE);
+  assert.equal(shell.localPackage(), process.platform === 'win32' ? WINDOWS_PACKAGE : POSIX_PACKAGE);
 
   const Base = shell.base({ shellArgv: spec => ['my-shell', '-c', spec.command] });
   assert.equal(typeof Base, 'function');
