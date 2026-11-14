@@ -1,27 +1,5 @@
-// connection.api compatibility bridge (browser half).
-//
-// dsh ≤ 0.1.1 exposed the browser RPC proxy as `connection.api`: namespace
-// objects (`llm` / `settings` / …) whose methods take one request object and
-// resolve to an RpcResponse (`{result: {ok, value | error}}`). dsh 0.1.2
-// restructured the wire: `connection` is a transport handle (`rpc`,
-// `generation`, `start`) and the application RPC face moved to the
-// `ctx.remote` Typert proxy, whose methods are positional and resolve to a
-// bare RpcResult (`{ok, value | error}`). Method names moved too:
-//
-//   api.llm.providers({})            → remote.llm.listProviders() +
-//                                      remote.llm.listConfigurableProviders()
-//   api.llm.models({})               → remote.session.modelCatalog()
-//   api.settings.describe({})        → remote.settings.describe()
-//   api.settings.update({ns,patch})  → deep-merge into the user section, then
-//                                      remote.settings.update(ns, merged, rev)
-//
-// When `connection.api` is absent this module synthesises the legacy proxy
-// from `ctx.remote`, so consumers written against the 0.1.1 face work
-// unchanged on 0.1.2. Provision is ordered through
-// `ctx.inject(['connection','remote'], …)`: the caller's `onReady` fires only
-// after the proxy is in place, letting dependent plugins hold a cordis
-// service inject on the ordering signal. On hosts where `connection.api`
-// already exists the bridge is a synchronous no-op.
+// connection.api 兼容桥保留旧请求与响应格式。连接句柄出现后立即提供
+// 稳定的 API 对象，具体请求等待 remote 服务就绪，避免客户端启动依赖网络。
 
 /** The legacy RPC proxy property checked on the connection handle. */
 export const CONNECTION_SERVICE = 'connection';
@@ -33,8 +11,7 @@ export const REMOTE_SERVICE = 'remote';
 export interface ConnectionApiCompatContext {
   get?(name: string): unknown;
   inject?(inject: string[], callback: (ctx: ConnectionApiCompatContext) => unknown): unknown;
-  /** cordis effect hook: when present, the bridge assignment and the
-   * fallback timer are torn down with the fiber (HMR-safe). */
+  /** 注册连接桥与等待中的请求的清理函数。 */
   effect?(fn: () => (() => void) | void): unknown;
 }
 
@@ -161,7 +138,7 @@ function joinProviderDirectory(
  * failure response rather than a synchronous throw, so one absent method does
  * not take down the whole proxy.
  */
-export function buildLegacyApiProxy(remote: RemoteLike): Record<string, unknown> {
+export function buildLegacyApiProxy(remote: RemoteLike, ready: Promise<void> = Promise.resolve()): Record<string, unknown> {
   const missing = (name: string): Promise<RpcResponse<never>> =>
     Promise.resolve({
       result: { ok: false, error: { code: 'transport', message: `[dshloader] connection.api: remote.${name} unavailable` } },
@@ -169,6 +146,7 @@ export function buildLegacyApiProxy(remote: RemoteLike): Record<string, unknown>
 
   const llm = {
     providers: async (): Promise<RpcResponse<{ providers: Array<Record<string, unknown>> }>> => {
+      await ready;
       const list = remote.llm?.listProviders;
       const listConfigurable = remote.llm?.listConfigurableProviders;
       if (list === undefined || listConfigurable === undefined) return missing('llm.listProviders');
@@ -186,6 +164,7 @@ export function buildLegacyApiProxy(remote: RemoteLike): Record<string, unknown>
       };
     },
     models: async (): Promise<RpcResponse<unknown>> => {
+      await ready;
       const catalog = remote.session?.modelCatalog;
       if (catalog === undefined) return missing('session.modelCatalog');
       return wrapRpc(catalog.call(remote.session));
@@ -194,6 +173,7 @@ export function buildLegacyApiProxy(remote: RemoteLike): Record<string, unknown>
 
   const settings = {
     describe: async (): Promise<RpcResponse<SettingsDescribeLike>> => {
+      await ready;
       const describe = remote.settings?.describe;
       if (describe === undefined) return missing('settings.describe');
       return wrapRpc(describe.call(remote.settings));
@@ -212,6 +192,7 @@ export function buildLegacyApiProxy(remote: RemoteLike): Record<string, unknown>
       section?: unknown;
       expectedRevision?: number;
     }): Promise<RpcResponse<unknown>> => {
+      await ready;
       const update = remote.settings?.update;
       const replace = remote.settings?.replace;
       if (update === undefined) return missing('settings.update');
@@ -237,6 +218,7 @@ export function buildLegacyApiProxy(remote: RemoteLike): Record<string, unknown>
       ops?: readonly unknown[];
       expectedRevision?: number;
     }): Promise<RpcResponse<unknown>> => {
+      await ready;
       const mutate = remote.settings?.mutate;
       if (mutate === undefined) return missing('settings.mutate');
       if (typeof request?.ns !== 'string' || !Array.isArray(request.ops)) {
@@ -252,100 +234,90 @@ export function buildLegacyApiProxy(remote: RemoteLike): Record<string, unknown>
 }
 
 /**
- * Install the legacy `connection.api` proxy when the host's connection
- * handle lacks one.
- *
- * The inject list names every nested Remote service the proxy touches:
- * cordis guards nested service access (`remote.session` etc.) behind the
- * caller fiber's inject declarations, so the namespaces are resolved through
- * `scope.get('remote.<name>')` inside the ordered fiber rather than by
- * walking properties off the `remote` service.
- *
- * @param ctx - the client plugin's cordis context.
- * @param onReady - invoked once the proxy question is settled: synchronously
- *   when no bridge is needed (legacy host, or a context without inject), or
- *   from the ordered inject fiber after the proxy was attached.
- * @returns true when the ready signal was delivered synchronously.
+ * 在连接句柄上安装稳定的旧版 API；网络就绪只影响请求，不阻塞插件激活。
+ * 原生 API 存在时直接复用，宿主仍支持旧接口期间保留此桥。
+ * @param ctx - 连接桥所属的客户端上下文。
+ * @param onReady - API 可读取时调用一次，不等待远程服务。
+ * @returns 是否已在返回前通知 API 就绪。
  */
 export function installConnectionApiCompat(
   ctx: ConnectionApiCompatContext,
   onReady: () => void,
 ): boolean {
-  const connection = ctx.get?.(CONNECTION_SERVICE) as ConnectionHandleLike | undefined;
-  if (connection?.api !== undefined) {
-    onReady();
-    return true;
-  }
-  if (typeof ctx.inject !== 'function') {
-    // No ordered hook: keep the legacy degraded behaviour rather than
-    // blocking a dependent plugin forever on a face that may never exist.
-    onReady();
-    return true;
-  }
-
-  // Reversible-patch bookkeeping: the bridge writes `connection.api` from an
-  // async inject fiber and arms a fallback timer — both must unwind with the
-  // caller fiber (HMR / unload), not leak onto the shared connection handle.
-  let bridged: { conn: ConnectionHandleLike; api: unknown } | undefined;
-  const timers = new Set<ReturnType<typeof setTimeout>>();
-  if (typeof ctx.effect === 'function') {
-    ctx.effect(() => () => {
-      if (bridged !== undefined && bridged.conn.api === bridged.api) {
-        delete bridged.conn.api;
-      }
-      bridged = undefined;
-      for (const timer of timers) clearTimeout(timer);
-      timers.clear();
-    });
-  }
-
-  // Stage A: wait for the connection handle alone — it exists on every host
-  // version. The remote.* nested services below are 0.1.2+ only, so they must
-  // NOT share this fiber: on a 0.1.0/0.1.1 host they never materialize and a
-  // combined inject list would pend forever, starving dependents of the
-  // ready signal (observed: dshLoaderUi never provided, boot stuck).
-  let ready = false;
-  const readyOnce = (): void => {
-    if (ready) return;
-    ready = true;
+  let closed = false;
+  ctx.effect?.(() => () => { closed = true; });
+  let notified = false;
+  const notify = (): void => {
+    if (notified) { return; }
+    notified = true;
     onReady();
   };
-  ctx.inject([CONNECTION_SERVICE], (scope) => {
-    const conn = scope.get?.(CONNECTION_SERVICE) as ConnectionHandleLike | undefined;
-    if (conn === undefined || conn.api !== undefined) {
-      readyOnce();
+  const install = (scope: ConnectionApiCompatContext, conn: ConnectionHandleLike): void => {
+    if (closed) { return; }
+    if (conn.api !== undefined) {
+      notify();
       return;
     }
-    // Stage B (0.1.2+): bridge from the Typert remote faces. They appear only
-    // after the gateway connects, and cordis guards nested service access
-    // behind the caller fiber's inject declarations — hence a second fiber
-    // naming each nested service.
-    ctx.inject?.(
-      [CONNECTION_SERVICE, `${REMOTE_SERVICE}.llm`, `${REMOTE_SERVICE}.session`, `${REMOTE_SERVICE}.settings`],
-      (inner) => {
-        const innerConn = inner.get?.(CONNECTION_SERVICE) as ConnectionHandleLike | undefined;
-        if (innerConn !== undefined && innerConn.api === undefined) {
-          const proxy = buildLegacyApiProxy({
+    const remote: RemoteLike = {};
+    let disposed = false;
+    let release!: () => void;
+    const ready = new Promise<void>((resolve) => { release = resolve; });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const settle = (): void => {
+      if (timer !== undefined) { clearTimeout(timer); timer = undefined; }
+      release();
+    };
+    const clearRemote = (): void => {
+      delete remote.llm;
+      delete remote.session;
+      delete remote.settings;
+    };
+    const proxy = buildLegacyApiProxy(remote, ready);
+    scope.effect?.(() => () => {
+      disposed = true;
+      clearRemote();
+      settle();
+      if (conn.api === proxy) { delete conn.api; }
+    });
+    conn.api = proxy;
+    // 超时只结束当前请求的等待；迟到的服务仍可供后续请求使用。
+    timer = setTimeout(settle, 15000);
+    (timer as { unref?: () => void }).unref?.();
+    if (scope.inject === undefined) {
+      settle();
+    } else {
+      scope.inject(
+        [CONNECTION_SERVICE, `${REMOTE_SERVICE}.llm`, `${REMOTE_SERVICE}.session`, `${REMOTE_SERVICE}.settings`],
+        (inner) => {
+          if (disposed) { return; }
+          const current: RemoteLike = {
             llm: inner.get?.(`${REMOTE_SERVICE}.llm`) as RemoteLike['llm'],
             session: inner.get?.(`${REMOTE_SERVICE}.session`) as RemoteLike['session'],
             settings: inner.get?.(`${REMOTE_SERVICE}.settings`) as RemoteLike['settings'],
+          };
+          Object.assign(remote, current);
+          inner.effect?.(() => () => {
+            if (remote.llm === current.llm && remote.session === current.session && remote.settings === current.settings) {
+              clearRemote();
+            }
           });
-          innerConn.api = proxy;
-          bridged = { conn: innerConn, api: proxy };
-        }
-        readyOnce();
-      },
-    );
-    // A host without connection.api AND without the remote faces (so stage B
-    // never fires) must not hold dependents forever: release them unbridged
-    // after a generous window; their per-call reads then fail loudly instead
-    // of the whole boot stalling on a service that will never exist.
-    const timer = setTimeout(() => {
-      timers.delete(timer);
-      readyOnce();
-    }, 15000);
-    (timer as { unref?: () => void }).unref?.();
-    timers.add(timer);
-  });
-  return false;
+          settle();
+        },
+      );
+    }
+    notify();
+  };
+  const connection = ctx.get?.(CONNECTION_SERVICE) as ConnectionHandleLike | undefined;
+  if (connection !== undefined) {
+    install(ctx, connection);
+  } else if (ctx.inject !== undefined) {
+    ctx.inject([CONNECTION_SERVICE], (scope) => {
+      if (closed) { return; }
+      const conn = scope.get?.(CONNECTION_SERVICE) as ConnectionHandleLike | undefined;
+      if (conn !== undefined) { install(scope, conn); }
+    });
+  } else {
+    notify();
+  }
+  return notified;
 }

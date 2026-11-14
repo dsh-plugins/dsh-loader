@@ -185,14 +185,8 @@ export function apply(ctx: ClientContextLike): void {
   if (api !== undefined) (api as Record<string, unknown>).ui = currentUi;
   else if (win.__dshLoader__ !== undefined) win.__dshLoader__.ui = currentUi;
 
-  // The service itself is a pure client-side object with no host
-  // dependencies: publish it synchronously so dependents gated on
-  // `dshLoaderUi` activate in the same pass as dsh-loader. The legacy
-  // `connection.api` proxy only bridges RPC calls made after activation, so
-  // it installs independently and must not gate service publication (a host
-  // without the remote faces otherwise holds every consumer for the 15 s
-  // fallback window, observed as "web boot: N entries did not activate").
-  ctx.provide?.(UI_SERVICE, currentUi);
+  // 先安装稳定的连接 API，依赖 UI 服务的插件可立即读取；远程连接只延迟请求。
   installConnectionApiCompat(ctx, () => {});
+  ctx.provide?.(UI_SERVICE, currentUi);
   } catch (error) { resources.dispose(); throw error; }
 }

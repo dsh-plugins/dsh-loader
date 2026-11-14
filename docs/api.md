@@ -25,6 +25,8 @@
 
 `@dsh-plugin/dsh-loader/client` 提供 UI 控件与 facade helper。用 `inject: ['dshLoaderUi']` 等待 UI facade，就绪后读取 `ctx.dshLoaderUi` 或 `window.__dshLoader__.ui`。`window.__dshLoader__` 保留 require、services、别名、patch、可选旧 settings rpc，新增 config 客户端。
 
+`connection.api` 在连接句柄可用时同步提供稳定对象，依赖插件可在激活时读取 `llm` 与 `settings`。远程接口尚未就绪时，首次请求等待最多 15 秒，超时返回 `transport` 错误；服务迟到后，后续请求可继续使用同一对象。桥接卸载会结束等待中的请求并删除自身安装的 API，保留其他插件替换的值。
+
 `registerModuleAlias(from, to, ownerCtx?)` / `registerPackageAlias(from, to, ownerCtx?)` 返回 disposer；忽略返回值的旧代码继续运行。多次 installClient 共用别名表、工厂和包装器，每个安装实例有自己的 dispose。
 
 `config` 客户端提供 `list/read/update/reset/subscribe/dispose`。表单使用 loader 自带客户端，不要求插件编写浏览器配置逻辑。客户端提交必须携带 expectedRevision，密码遮蔽值不能当明文使用。
