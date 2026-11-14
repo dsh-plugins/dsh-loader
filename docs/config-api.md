@@ -301,4 +301,28 @@ React.useEffect(() => setReader(async signal => {
 
 持久化字段设置 `hidden: true` 后仍参与默认值、校验、脱敏与保存，由管理面板提供编辑入口。布局分组可设置 `panel: "memory-import"`，将该面板嵌入组内；同一面板不得重复嵌入，嵌入后不再显示于根列表。面板必须在 `template.panels` 中声明。
 
+### 绑定一个持久化字段
+
+面板再声明 `field: ['字段路径']` 即可成为**草稿绑定编辑器**：它不再自行保存，而是编辑该字段在配置卡片里的当前草稿，随卡片的「保存」按钮或 `Ctrl+S` 与卡片其他字段一并提交，共用同一次修订号校验。`ConfigPanelProps` 此时额外提供：
+
+| 属性 | 行为 |
+| --- | --- |
+| `value` | 该路径当前的草稿值；卡片草稿变化时同步更新 |
+| `setValue(value)` | 替换该路径的草稿值，只改草稿、不写磁盘；调用后卡片立即进入"有未保存的修改"状态 |
+
+```ts
+// 宿主模板
+panels: [{ id: 'rules', title: '规则', custom: true, field: ['modes'], fields: [], operations: [] }]
+```
+
+```tsx
+// 客户端组件
+function Rules({ value, setValue }: ConfigPanelProps) {
+  const modes = Array.isArray(value) ? value as string[] : [];
+  return <button type="button" onClick={() => setValue?.([...modes, 'next'])}>追加</button>;
+}
+```
+
+约束：绑定目标必须是 `custom: true` 面板、合法字段路径、且不含密码字段的叶子字段；分组（`group`）与含密码的对象/数组会被 `invalid-template` 拒绝。未声明 `field` 的面板保持原有行为——自带草稿、用自己的按钮保存、有独立的未保存状态。绑定面板不显示自己的保存按钮，由卡片统一提交；卡片的「取消修改」「恢复默认值」同样作用于面板草稿。
+
 临时操作的 password 字段可接收当前配置返回的 `$secret` 引用。loader 在服务端恢复实际值后校验并执行操作，适合测试尚未保存的 MCP 草稿；处理器只返回测试结果，禁止把实际凭据放入返回值。未知引用会被拒绝。

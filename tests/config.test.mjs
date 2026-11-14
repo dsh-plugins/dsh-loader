@@ -162,3 +162,18 @@ test('invalid or executable dialog declarations and transient dialog fields are 
   assert.throws(() => build({ type: 'group', label: 'Group', fields: [], dialog: { id: 'editor' } }));
   assert.throws(() => defineConfig({ id: 'dialog', packageName: '@example/dialog', title: 'Dialog', fields: [], panels: [{ id: 'panel', title: 'Panel', fields: [{ type: 'text', key: 'draft', label: 'Draft', dialog: { id: 'editor' } }], operations: [] }] }));
 });
+test('a custom panel may bind one persisted field so its edits save with the card', () => {
+  const build = (panel, fields = [{ type: 'array', key: 'modes', label: 'Modes', item: { type: 'text', label: 'Mode' } }]) =>
+    defineConfig({ id: 'bound', packageName: '@example/bound', title: 'Bound', fields, panels: [{ id: 'rules', title: 'Rules', custom: true, fields: [], operations: [], ...panel }] });
+  // 合法绑定：自定义面板 + 叶子字段。
+  assert.deepEqual(build({ field: ['modes'] }).panels[0].field, ['modes']);
+  // 分组、密码、面板内草稿字段、非自定义面板以及非法路径一律拒绝。
+  assert.throws(() => build({ field: ['missing'] }), error => error.code === 'invalid-template');
+  assert.throws(() => build({ field: ['modes', 'name'] }), error => error.code === 'invalid-template');
+  assert.throws(() => build({ field: [] }), error => error.code === 'invalid-template');
+  assert.throws(() => build({ field: ['__proto__'] }), error => error.code === 'invalid-template');
+  assert.throws(() => build({ field: ['secret'] }, [{ type: 'password', key: 'secret', label: 'Secret' }]), error => error.code === 'invalid-template');
+  assert.throws(() => build({ custom: false, field: ['modes'] }), error => error.code === 'invalid-template');
+  // 对象字段同样可以绑定，绑定路径允许指向嵌套对象。
+  assert.deepEqual(build({ field: ['doc'] }, [{ type: 'object', key: 'doc', label: 'Doc', fields: [{ type: 'text', key: 'title', label: 'Title' }] }]).panels[0].field, ['doc']);
+});

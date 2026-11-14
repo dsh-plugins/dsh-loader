@@ -1,8 +1,8 @@
 import * as React from 'react';
-import { type ConfigView, type ConfigField, ConfigError } from '../config.js';
+import { type ConfigView, type ConfigField, type ConfigValue, ConfigError } from '../config.js';
 import type { ConfigClient } from '../config-client.js';
 import type { BootDescriptor } from '../bootstrap.js';
-import { Fields, setAt } from './config-fields.js';
+import { Fields, at, setAt } from './config-fields.js';
 import { OperationPanel } from './config-operations.js';
 import type { ConfigDialogsAPI } from './config-dialogs.js';
 import { ConfigModelsContext } from './model-select.js';
@@ -84,10 +84,17 @@ export function ConfigCard({ view, client, dialogs, layout = 'settings', registe
     if (!panel) { return null; }
     if (!panel.custom) { return <OperationPanel key={id} pluginId={view.template.id} panel={panel} client={client} saved={base.revision > view.revision ? base.value : view.value} available={view.availableOperations}/>; }
     const Component = dialogs?.panelComponent(view.template.id, id);
+    const field = panel.field;
+    // A bound panel edits one persisted field, so it writes the card draft and
+    // shares the card's Save button, revision check and unsaved-changes state.
+    const bound = field === undefined ? {} : {
+      value: at(draft, field),
+      setValue: (next: ConfigValue) => { setDraft(current => setAt(current, field, next)); setDirty(true); },
+    };
     return <section key={id} className={inline ? undefined : 'dshl-config-panel'} data-config-panel={id}>
       {!inline && <h3>{panel.title}</h3>}
       {panel.description && <p className="dshl-config-help">{panel.description}</p>}
-      {Component ? <PanelBoundary component={Component}><Component view={base.revision > view.revision ? base : view} client={client}/></PanelBoundary> : <p role="status">请启用插件客户端以显示此管理面板。</p>}
+      {Component ? <PanelBoundary component={Component}><Component view={base.revision > view.revision ? base : view} client={client} {...bound}/></PanelBoundary> : <p role="status">请启用插件客户端以显示此管理面板。</p>}
     </section>;
   };
   const [, refreshDialogs] = React.useReducer(value => value + 1, 0);

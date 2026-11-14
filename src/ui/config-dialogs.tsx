@@ -37,6 +37,13 @@ export interface ConfigDialogHandle<T> {
 export interface ConfigPanelProps {
   view: ConfigView;
   client: ConfigClient;
+  /**
+   * 模板声明 `field` 时，该路径当前的草稿值；改动随配置卡片的“保存”一起提交。
+   * 未绑定字段的面板没有这两个属性，仍自行保存。
+   */
+  value?: ConfigValue;
+  /** 替换该草稿值；只改草稿，不直接写磁盘。 */
+  setValue?(value: ConfigValue): void;
 }
 /** id 对应配置模板中声明 custom:true 的临时面板。 */
 export interface ConfigPanelOptions {

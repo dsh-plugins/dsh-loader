@@ -44,7 +44,23 @@ export interface ConfigTemplate {
   panels?: ConfigPanel[];
 }
 /** A panel owns a page-local draft, independent of persisted configuration. */
-export interface ConfigPanel { id: string; title: string; description?: string; custom?: boolean; fields: ConfigField[]; operations: ConfigOperation[] }
+export interface ConfigPanel {
+  id: string;
+  title: string;
+  description?: string;
+  custom?: boolean;
+  /**
+   * Persisted path (from the configuration root) a custom panel edits.
+   *
+   * Declaring it turns the panel into a draft-bound editor: it receives that
+   * field's draft value plus a setter, so its edits are committed by the
+   * card's own Save button under the same revision instead of a separate
+   * write. Omit it to keep the page-local draft and per-panel operations.
+   */
+  field?: string[];
+  fields: ConfigField[];
+  operations: ConfigOperation[];
+}
 export interface ConfigResultDisplay { type: 'text' | 'markdown' | 'list' | 'json'; title?: string; path?: string[]; label?: string[] }
 export interface ConfigOperation {
   /** Unique across all panels of this template. */
@@ -163,6 +179,12 @@ export function validateTemplate(template: ConfigTemplate): void {
       throw new ConfigError('invalid-template', 'custom must be boolean');
     }
     if (!identifier(panel.id) || panelIds.has(panel.id) || typeof panel.title !== 'string' || !panel.title || !Array.isArray(panel.operations)) throw new ConfigError('invalid-template', 'Invalid or duplicate panel');
+    if (panel.field !== undefined) {
+      const target = path(panel.field) && findConfigField(template.fields, panel.field);
+      // A bound panel replaces one persisted field's editor, so its target must be a
+      // leaf value the card can save; groups, secrets and panel-local drafts are out.
+      if (panel.custom !== true || !target || target.type === 'group' || hasPassword(target)) throw new ConfigError('invalid-template', 'Invalid panel field binding');
+    }
     panelIds.add(panel.id); walk(panel.fields, new Set(), true);
     mapValues(panel.fields, defaultsFor(panel.fields), (field, value) => { if (field.type === 'password' && value !== '') throw new ConfigError('invalid-template', 'Transient passwords cannot have non-empty defaults'); return value; });
     for (const operation of panel.operations) {
