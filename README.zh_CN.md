@@ -70,3 +70,9 @@ npm run test:browser
 ```
 
 浏览器验收服务器使用仓库 `.cache/browser/profile`，不读写用户实际 profile。版本矩阵使用已提交的发布契约与完整 npm 锁文件；更新流程见支持表。不会自动迁移其他插件的旧配置，也不会在构建或测试时发布 npm 包。
+
+## 插件市场默认版本
+
+在 DSH Loader 设置中启用 `preferNewestMarketVersion`，市场列表和详情会默认选择 npm `latest` / `next` 标签中 SemVer 较新的兼容版本。默认关闭，沿用官方选版。只选择已收录在市场索引中的版本；显式选版不受影响。标签查询超时、失败或无可用候选时保留官方默认值。设置即时生效。
+
+也可在 loader 的 Cordis 配置或 profile `package.json` 的 `dsh.dshloader` 下设置 `preferNewestMarketVersion: true`；已保存的设置页值优先。

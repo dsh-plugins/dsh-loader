@@ -70,3 +70,9 @@ npm run test:browser
 ```
 
 The browser fixture uses `.cache/browser/profile`, not a user profile. Matrix tests use committed npm dependency and contract snapshots. See the support document for refresh instructions. Existing plugin configuration files are not migrated automatically; build and test never publish the package.
+
+## Default market version
+
+Enable `preferNewestMarketVersion` in DSH Loader settings to default market listings and details to the newer compatible npm `latest` / `next` version by SemVer. Disabled by default. Candidates must exist in the market index; explicit version choices are unchanged. Failed or timed-out tag lookups retain the official default. Changes apply immediately.
+
+The option also accepts `true` in the loader Cordis entry config or the profile manifest under `dsh.dshloader`. Saved settings take precedence.

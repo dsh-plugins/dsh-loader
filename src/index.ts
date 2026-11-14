@@ -2,6 +2,7 @@ import { ConfigStore } from './services/config.js';
 import { installConfigBridge } from './services/config-bridge.js';
 import { ownedScope } from './lifecycle.js';
 import { createBootDescriptor } from './bootstrap.js';
+import { installMarketVersionPolicy } from './market.js';
 // dshloader host bundle entry (design.md §7.3 / §4.4).
 //
 // Exports the cordis function-plugin shape (`name`, `inject`, `apply`) and
@@ -26,6 +27,7 @@ export const inject = ['webServer'];
 
 interface LoaderConfig {
   exposeAllNamespaces: boolean;
+  preferNewestMarketVersion: boolean;
   hostPackageAliases?: Record<string, string>;
   profileDir?: string;
 }
@@ -78,17 +80,19 @@ export function readLoaderConfig(opts: { profileDir?: string; config?: Partial<L
   const envOn = process.env.DSHLOADER_EXPOSE_ALL_SETTINGS === '1' || process.env.DSHLOADER_EXPOSE_ALL_SETTINGS === 'true';
   const entryOn = Boolean(opts.config?.exposeAllNamespaces);
   let pkgOn = false;
+  let marketOn = false;
   const dir = opts.profileDir ?? detectProfileDir();
   if (dir !== undefined) {
     try {
       const manifest = JSON.parse(readFileSync(join(resolve(dir), 'package.json'), 'utf8')) as {
-        dsh?: { dshloader?: { exposeAllNamespaces?: boolean } };
+        dsh?: { dshloader?: { exposeAllNamespaces?: boolean; preferNewestMarketVersion?: boolean } };
         dshLoader?: { settings?: { exposeAllNamespaces?: boolean } };
       };
       pkgOn = Boolean(
         manifest.dsh?.dshloader?.exposeAllNamespaces ??
           manifest.dshLoader?.settings?.exposeAllNamespaces,
       );
+      marketOn = manifest.dsh?.dshloader?.preferNewestMarketVersion === true;
     } catch {
       /* ignore */
     }
@@ -100,6 +104,7 @@ export function readLoaderConfig(opts: { profileDir?: string; config?: Partial<L
   }
   return {
     exposeAllNamespaces: envOn || entryOn || pkgOn,
+    preferNewestMarketVersion: opts.config?.preferNewestMarketVersion ?? marketOn,
     hostPackageAliases: opts.config?.hostPackageAliases,
     profileDir: opts.config?.profileDir ?? dir,
   };
@@ -180,6 +185,24 @@ export async function applyAdapter(
   if (!adapter.authorizeConfig) throw new Error('dshloader: adapter lacks browser access control');
   resources.add(installConfigBridge(api.web, store, adapter.authorizeConfig));
   ctx.reflect.provide('dshLoader', api);
+
+  let preferNewest = config.preferNewestMarketVersion;
+  resources.add(installMarketVersionPolicy(ctx, () => preferNewest));
+  if (config.profileDir) {
+    // Settings I/O must not extend the host's startup dependency chain.
+    void store.register<{ preferNewestMarketVersion: boolean }>(ctx, {
+      id: 'dsh-loader', packageName: name, title: 'DSH Loader',
+      fields: [{ type: 'boolean', key: 'preferNewestMarketVersion',
+        label: '插件市场优先选择 latest / next 中较新的版本', default: preferNewest,
+        description: '按 SemVer 比较两个标签，仅选择市场中兼容的版本；不改变手动指定的版本。关闭时沿用官方默认选版。' }],
+    }).then(handle => {
+      if (resources.disposed) return;
+      preferNewest = handle.get().value.preferNewestMarketVersion;
+      resources.add(handle.watch(({ value }) => { preferNewest = value.preferNewestMarketVersion; }));
+    }).catch(error => {
+      if (!resources.disposed) console.warn(`${LOG_PREFIX} could not load market preferences: ${String(error)}`);
+    });
+  }
 
   console.log(`${LOG_PREFIX} loaded adapter ${factory.name} for dsh ${dshVersion} (mode: ${mode})`);
   console.log(`${LOG_PREFIX} registered stable API: settings, web, services, patch, registry, llm`);
