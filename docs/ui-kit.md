@@ -326,6 +326,15 @@ console.table(ui.diagnose());
 
 想要 DSH 的富弹出菜单而不是现成下拉时，用 `DshMenu` 包装层自行组装触发钮与弹层（见 §2 的 ⚠️ 小节）；`MenuSelect` 就是这套组合的封装。
 
+`DshMenu` 的 `maxRows` 给长列表加行数上限，超出部分在菜单内部滚动，`footer` 里的固定操作行始终可见：
+
+```tsx
+<DshMenu open={open} portal maxRows={5} items={items} footer={footer}
+  onSelect={toggle} onClose={close} anchor={<button type="button">选择</button>} />
+```
+
+上限按**实测行高**换算，所以 `dense`/`compact` 或换行的多行标签会各自得到正确的像素高度；新列表项、字体加载与 footer 变化都会重新钳制。不传 `maxRows` 时行为与平台菜单一致（只受窗口高度约束）。
+
 ### 3.1 设计令牌
 
 `src/ui/style.ts` 的 `T` 是 shell 令牌 + 回退值，`G` 是共用几何量（输入高 28/按钮高 32、圆角 6/卡片 10/胶囊 999、字号 13/12 等）。自定义样式请用它们，别写死颜色：

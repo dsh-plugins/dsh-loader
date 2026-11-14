@@ -98,6 +98,16 @@ export interface DshMenuProps {
   compact?: boolean;
   /** Portal mode only: supply the anchor rect directly. */
   getAnchorRect?: () => DOMRect | null;
+  /**
+   * Show at most this many item rows before the list scrolls inside the card.
+   *
+   * The platform menu caps its height to the viewport only, so a long list
+   * fills the screen and buries the trigger. A row-count cap keeps short lists
+   * natural and long lists scannable; the pinned {@link footer} stays visible.
+   * Rows are measured at their natural height, so dense/compact menus cap to
+   * their own row height.
+   */
+  maxRows?: number;
   /** Extra class on the anchor wrapper. */
   className?: string;
 }
@@ -106,18 +116,90 @@ export interface DshMenuProps {
 let platformMissing = false;
 
 /**
+ * Clamp a menu list's scroll region to `maxRows` item rows.
+ *
+ * The platform renders a scrollable `.viewport` plus a pinned footer, and emits
+ * no hook for either — and in portal mode the card is moved to `document.body`,
+ * out of the wrapper's DOM subtree. The only node we can anchor to is one we
+ * render ourselves, so a hidden marker rides inside the first row's label and
+ * the list is found from there.
+ * @param open - whether the list is currently mounted.
+ * @param rows - requested row count; `undefined` disables the clamp.
+ * @returns marker ref plus a helper that stamps it into the first row.
+ */
+function useRowCap(open: boolean, rows: number | undefined): {
+  marker: React.RefObject<HTMLSpanElement | null>;
+  stamp(entries: readonly MenuEntry[]): readonly MenuEntry[];
+} {
+  const marker = React.useRef<HTMLSpanElement | null>(null);
+  React.useLayoutEffect(() => {
+    if (!open || rows === undefined) {
+      return undefined;
+    }
+    const viewport = marker.current?.closest('[role="menu"]')
+      ?.querySelector<HTMLElement>(':scope > [role="presentation"]');
+    if (!viewport) {
+      return undefined;
+    }
+    const clamp = (): void => {
+      // Rows are wrapped one level deep by the platform, so count buttons, not children.
+      const items = [...viewport.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+      if (items.length === 0) {
+        return;
+      }
+      // Rows are uniform in the platform menu; the tallest wins so wrapped labels
+      // still honour the requested count.
+      const rowHeight = Math.max(...items.map(item => item.getBoundingClientRect().height));
+      const visible = Math.min(rows, items.length);
+      viewport.style.maxHeight = `${Math.ceil(rowHeight * visible)}px`;
+      viewport.style.overflowY = items.length > visible ? 'auto' : '';
+      viewport.style.overscrollBehavior = 'contain';
+      // Expose the clamp for diagnostics; consumers never depend on it.
+      viewport.dataset.dshlRows = `${visible}/${items.length}`;
+    };
+    clamp();
+    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(clamp);
+    observer?.observe(viewport);
+    return () => observer?.disconnect();
+  }, [open, rows]);
+  const stamp = (entries: readonly MenuEntry[]): readonly MenuEntry[] => {
+    if (rows === undefined) {
+      return entries;
+    }
+    const index = entries.findIndex(entry => !('type' in entry));
+    if (index === -1) {
+      return entries;
+    }
+    const item = entries[index] as MenuItem;
+    const marked: MenuItem = {
+      ...item,
+      label: <>{item.label}<span ref={marker} hidden/></>,
+    };
+    return [...entries.slice(0, index), marked, ...entries.slice(index + 1)];
+  };
+  return { marker, stamp };
+}
+
+/**
  * The stable menu surface for dshloader consumers.
  *
  * Forwards every prop verbatim to the platform primitive — this wrapper's job
- * is ISOLATION (one import site, hand-owned types), not behaviour change. When
- * the platform evolves, adaptation code goes here and consumers stay put.
+ * is ISOLATION (one import site, hand-owned types) plus the few presentation
+ * knobs the platform does not expose. When the platform evolves, adaptation
+ * code goes here and consumers stay put.
  */
 export function DshMenu(props: DshMenuProps): React.ReactElement | null {
   if (platformMissing) return null;
+  const { maxRows, ...forwarded } = props;
+  const cap = useRowCap(props.open, maxRows);
   try {
-    // Forward verbatim. `PlatformMenu` is typed against upstream; the cast keeps
-    // our hand-written contract authoritative on the consumer-facing side.
-    return (PlatformMenu as unknown as (p: DshMenuProps) => React.ReactElement)(props);
+    // Forward the platform props. `PlatformMenu` is typed against upstream; the
+    // cast keeps our hand-written contract authoritative on the consumer side.
+    const menu = (PlatformMenu as unknown as (p: DshMenuProps) => React.ReactElement)({
+      ...(forwarded as DshMenuProps),
+      items: cap.stamp(forwarded.items),
+    });
+    return menu;
   } catch (error) {
     // Render-time failures (prop-shape drift) degrade to an empty menu with one
     // loud warning rather than tearing down the host plugin's tree.
