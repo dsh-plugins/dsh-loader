@@ -48,34 +48,45 @@ export function installMarketVersionPolicy(
   const cache = new Map<string, { expires: number; value: Promise<Tags> }>();
   const abort = new AbortController();
   const readTags: ReadTags = (name, registry = 'https://registry.npmjs.org/') => {
-    const url = new URL(encodeURIComponent(name), registry.endsWith('/') ? registry : registry + '/').href;
+    // Fetch the small tag map, not the package's entire version history.
+    const escapedName = encodeURIComponent(name).replace(/^%40/, '@');
+    const url = new URL(`-/package/${escapedName}/dist-tags`, registry.endsWith('/') ? registry : registry + '/').href;
     const cached = cache.get(url);
     if (cached && cached.expires > Date.now()) return cached.value;
     const value = (async () => {
-      const response = await fetcher(url, { signal: AbortSignal.any([abort.signal, AbortSignal.timeout(3000)]),
-        headers: { accept: 'application/vnd.npm.install-v1+json' } });
-      if (!response.ok) throw new Error(`npm metadata: ${response.status}`);
-      const manifest = await response.json() as { 'dist-tags'?: Tags };
-      return manifest['dist-tags'] ?? {};
+      const response = await fetcher(url, { signal: AbortSignal.any([abort.signal, AbortSignal.timeout(5000)]),
+        headers: { accept: 'application/json' } });
+      if (!response.ok) throw new Error(`npm dist-tags: ${response.status}`);
+      return await response.json() as Tags;
     })();
     cache.set(url, { expires: Date.now() + 60_000, value });
+    void value.catch(() => {
+      // A temporary failure must not pin the official default for a minute.
+      if (cache.get(url)?.value === value) cache.delete(url);
+    });
     return value;
   };
   const disposers: (() => void)[] = [];
   const attach = (scope: CordisContext): void => {
-    const market = scope.get('pluginMarket');
+    const service = scope.get('pluginMarket');
+    // Cordis creates a new method proxy on each read. Patch the shared raw
+    // service so identity checks on cleanup work and call-site `this` survives.
+    const market = service?.[Symbol.for('cordis.original')] ?? service;
     if (!market || typeof market.search !== 'function' || typeof market.entry !== 'function') return;
     for (const method of ['search', 'entry'] as const) {
       const descriptor = Object.getOwnPropertyDescriptor(market, method);
       const original = market[method];
+      let active = true;
       const wrapped = async function(this: unknown, ...args: unknown[]) {
         const result = await original.apply(this, args);
-        if (!enabled() || abort.signal.aborted || !result) return result;
-        if (method === 'entry') return preferNewestTag(result, readTags);
-        return { ...result, entries: await Promise.all(result.entries.map((entry: MarketEntry) => preferNewestTag(entry, readTags))) };
+        if (!active || !enabled() || abort.signal.aborted || !result) return result;
+        const selected = method === 'entry' ? await preferNewestTag(result, readTags)
+          : { ...result, entries: await Promise.all(result.entries.map((entry: MarketEntry) => preferNewestTag(entry, readTags))) };
+        return active && enabled() && !abort.signal.aborted ? selected : result;
       };
       market[method] = wrapped;
       const dispose = () => {
+        active = false;
         if (market[method] !== wrapped) return;
         if (descriptor) Object.defineProperty(market, method, descriptor);
         else delete market[method];

@@ -73,6 +73,6 @@ The browser fixture uses `.cache/browser/profile`, not a user profile. Matrix te
 
 ## Default market version
 
-Enable `preferNewestMarketVersion` in DSH Loader settings to default market listings and details to the newer compatible npm `latest` / `next` version by SemVer. Disabled by default. Candidates must exist in the market index; explicit version choices are unchanged. Failed or timed-out tag lookups retain the official default. Changes apply immediately.
+Enable `preferNewestMarketVersion` in DSH Loader settings to default market listings and details to the newer compatible npm `latest` / `next` version by SemVer. Disabled by default. Candidates must exist in the market index; explicit version choices are unchanged. Only the lightweight dist-tags endpoint is requested, with successful results cached for one minute. Failed or timed-out lookups retain the official default and are retried on the next read. Changes apply to subsequent reads; refresh an already loaded market listing.
 
 The option also accepts `true` in the loader Cordis entry config or the profile manifest under `dsh.dshloader`. Saved settings take precedence.

@@ -73,6 +73,6 @@ npm run test:browser
 
 ## 插件市场默认版本
 
-在 DSH Loader 设置中启用 `preferNewestMarketVersion`，市场列表和详情会默认选择 npm `latest` / `next` 标签中 SemVer 较新的兼容版本。默认关闭，沿用官方选版。只选择已收录在市场索引中的版本；显式选版不受影响。标签查询超时、失败或无可用候选时保留官方默认值。设置即时生效。
+在 DSH Loader 设置中启用 `preferNewestMarketVersion`，市场列表和详情会默认选择 npm `latest` / `next` 标签中 SemVer 较新的兼容版本。默认关闭，沿用官方选版。只选择已收录在市场索引中的版本；显式选版不受影响。仅请求轻量的 dist-tags 接口，成功结果缓存一分钟；查询超时、失败或无可用候选时保留官方默认值，失败请求会在下次读取时重试。设置影响后续读取，已打开的市场列表需要刷新。
 
 也可在 loader 的 Cordis 配置或 profile `package.json` 的 `dsh.dshloader` 下设置 `preferNewestMarketVersion: true`；已保存的设置页值优先。

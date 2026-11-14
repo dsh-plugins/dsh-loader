@@ -46,7 +46,7 @@ test('wraps search and entry, caches tags, changes live, and restores methods on
   let enabled = false, fetches = 0;
   const dispose = installMarketVersionPolicy({ get: () => market, effect() {} }, () => enabled, async () => {
     fetches++;
-    return { ok: true, json: async () => ({ 'dist-tags': { latest: '1.0.0', next: '2.0.0-rc.2' } }) };
+    return { ok: true, json: async () => ({ latest: '1.0.0', next: '2.0.0-rc.2' }) };
   });
   assert.equal(await market.entry(), original);
   assert.equal(fetches, 0);
@@ -63,4 +63,82 @@ test('wraps search and entry, caches tags, changes live, and restores methods on
 test('loader config defaults off and accepts explicit enable/disable', () => {
   assert.equal(readLoaderConfig({ profileDir: '.' }).preferNewestMarketVersion, false);
   assert.equal(readLoaderConfig({ profileDir: '.', config: { preferNewestMarketVersion: true } }).preferNewestMarketVersion, true);
+});
+
+test('reads only dist-tags for scoped packages and preserves custom registry paths', async () => {
+  const value = { ...entry(), name: '@dsh-plugin/dsh-ui-experience' };
+  value.versions = value.versions.map(v => ({ ...v, source: { type: 'npm', registry: 'https://registry.example/npm' } }));
+  const market = { async search() { return { entries: [value] }; }, async entry() { return value; } };
+  const requests = [];
+  const dispose = installMarketVersionPolicy({ get: () => market, effect() {} }, () => true, async (url, init) => {
+    requests.push({ url, accept: init.headers.accept });
+    return { ok: true, json: async () => ({ latest: '1.0.0', next: '2.0.0-rc.2' }) };
+  });
+  try {
+    assert.equal((await market.search()).entries[0].defaultVersion, '2.0.0-rc.2');
+    assert.deepEqual(requests, [{
+      url: 'https://registry.example/npm/-/package/@dsh-plugin%2Fdsh-ui-experience/dist-tags', accept: 'application/json',
+    }]);
+  } finally { dispose(); }
+});
+
+test('a failed tag lookup is retried on the next read instead of caching rejection', async () => {
+  const value = entry();
+  const market = { async search() { return { entries: [value] }; }, async entry() { return value; } };
+  let calls = 0;
+  const dispose = installMarketVersionPolicy({ get: () => market, effect() {} }, () => true, async () => {
+    if (++calls === 1) throw new Error('temporary network failure');
+    return { ok: true, json: async () => ({ next: '2.0.0-rc.2' }) };
+  });
+  try {
+    assert.equal(await market.entry(), value);
+    assert.equal((await market.entry()).defaultVersion, '2.0.0-rc.2');
+    assert.equal(calls, 2);
+  } finally { dispose(); }
+});
+
+test('restores methods behind Cordis service proxies and keeps retained wrappers inert', async () => {
+  const value = entry();
+  const prototype = { async search() { return { entries: [value] }; }, async entry() { return value; } };
+  const market = Object.create(prototype);
+  // Cordis returns a new function proxy on every method read.
+  const view = new Proxy(market, { get(target, key) {
+    if (key === Symbol.for('cordis.original')) return target;
+    const result = Reflect.get(target, key);
+    return typeof result === 'function' ? new Proxy(result, {}) : result;
+  } });
+  const effects = [];
+  const dispose = installMarketVersionPolicy({ get: () => view, effect: fn => effects.push(fn()) }, () => true,
+    async () => ({ ok: true, json: async () => ({ next: '2.0.0-rc.2' }) }));
+  try {
+    assert.equal((await view.entry()).defaultVersion, '2.0.0-rc.2');
+    const retained = view.entry;
+    effects.forEach(off => off());
+    assert.equal(Object.hasOwn(market, 'entry'), false);
+    assert.equal(Object.hasOwn(market, 'search'), false);
+    assert.equal(await retained.call(view), value);
+  } finally { dispose(); }
+});
+
+test('concurrent reads share a request and disabling during lookup preserves the official default', async () => {
+  const value = entry();
+  const market = { async search() { return { entries: [value] }; }, async entry() { return value; } };
+  let enabled = true, calls = 0, resolveTags;
+  const tags = new Promise(resolve => { resolveTags = resolve; });
+  const dispose = installMarketVersionPolicy({ get: () => market, effect() {} }, () => enabled, async () => {
+    calls++;
+    return { ok: true, json: () => tags };
+  });
+  try {
+    const listing = market.search(), detail = market.entry();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(calls, 1);
+    enabled = false;
+    resolveTags({ next: '2.0.0-rc.2' });
+    assert.equal((await listing).entries[0], value);
+    assert.equal(await detail, value);
+    enabled = true;
+    assert.equal((await market.entry()).defaultVersion, '2.0.0-rc.2');
+    assert.equal(calls, 1);
+  } finally { dispose(); }
 });
