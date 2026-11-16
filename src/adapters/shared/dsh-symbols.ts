@@ -27,7 +27,8 @@ export const NODE_MAX_TIMER_DELAY_MS = 2147483647;
 
 /** The raw modules this facade forwards to, as resolved at boot. */
 export interface DshSymbolModules {
-  tools?: { defineTool?: unknown; ToolArgsError?: unknown };
+  tools?: { defineTool?: unknown; ToolArgsError?: unknown; projectToolSchema?: unknown; ToolContextUnavailableError?: unknown };
+  toolPipeline?: { ToolExecutionPipeline?: unknown; executeToolBatch?: unknown };
   timeout?: { deadline?: unknown; MAX_TIMER_DELAY_MS?: number };
   credentials?: { credentialRef?: unknown };
   subagent?: { delegationDepthOf?: unknown };
@@ -54,6 +55,12 @@ export interface DshSymbolsAPI {
     defineTool<T>(definition: T): T;
     /** `ToolArgsError` — the error class dsh expects for invalid tool arguments. */
     readonly ToolArgsError: new (messages: string[]) => Error;
+    /** 使用宿主的 schema 投影，保持参数声明规则一致。 */
+    projectToolSchema<T = unknown>(definition: unknown, strict?: boolean): T;
+    readonly ToolContextUnavailableError: new (message: string) => Error;
+    /** 复用宿主的参数校验、权限、审批和工具结果记录。 */
+    readonly ToolExecutionPipeline: new (...args: any[]) => any;
+    executeToolBatch<T = unknown>(...args: any[]): Promise<T>;
   };
   timeout: {
     /** `deadline(...)` — dsh's cancellation-aware deadline helper. */
@@ -121,6 +128,18 @@ export function createDshSymbolsAPI(opts: { modules?: DshSymbolModules }): DshSy
       },
     },
     tools: {
+      projectToolSchema(definition, strict) {
+        return required<(...args: any[]) => any>(m.tools?.projectToolSchema, '@deepseek-ai/dsh-tools', 'tools.projectToolSchema')(definition, strict);
+      },
+      get ToolContextUnavailableError() {
+        return required<new (message: string) => Error>(m.tools?.ToolContextUnavailableError, '@deepseek-ai/dsh-tools', 'tools.ToolContextUnavailableError');
+      },
+      get ToolExecutionPipeline() {
+        return required<new (...args: any[]) => any>(m.toolPipeline?.ToolExecutionPipeline, '@deepseek-ai/dsh-tools/pipeline', 'tools.ToolExecutionPipeline');
+      },
+      executeToolBatch(...args) {
+        return required<(...args: any[]) => any>(m.toolPipeline?.executeToolBatch, '@deepseek-ai/dsh-tools/pipeline', 'tools.executeToolBatch')(...args);
+      },
       defineTool(definition) {
         const fn = required<(d: unknown) => unknown>(
           m.tools?.defineTool,

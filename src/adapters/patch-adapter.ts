@@ -1,6 +1,7 @@
 import { create } from './shared-host.js';
 import { preloadRegistryModules } from './modules.js';
 import { createLlmAPI } from '../services/llm.js';
+import { createPatchAPI } from '../patch.js';
 import { createDshSymbolsAPI } from '../services/dsh-symbols.js';
 import { browserAccess } from './http-access.js';
 import type { PatchMetadata } from './metadata.js';
@@ -36,7 +37,7 @@ export function makePatchAdapter(client: PatchMetadata): AdapterFactory {
           }
           adapter.services = createServicesAPI({ ctx });
           adapter.registry = createRegistryAPI({ ctx, modules: adapter.modules });
-          adapter.llm = createLlmAPI({ module: adapter.modules.llm });
+          adapter.llm = createLlmAPI({ module: adapter.modules.llm, patch: createPatchAPI(ctx) });
           adapter.dsh = createDshSymbolsAPI({ modules: adapter.modules });
           await base.apply();
         },

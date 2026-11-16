@@ -15,6 +15,7 @@ export async function preloadRegistryModules(importModule: (specifier: string) =
   const settingsSpecifier = '@deepseek-ai/dsh-settings';
   const llmSpecifier = '@deepseek-ai/dsh-llm';
   const toolsSpecifier = '@deepseek-ai/dsh-tools';
+  const toolPipelineSpecifier = '@deepseek-ai/dsh-tools/pipeline';
   const timeoutSpecifier = '@deepseek-ai/dsh-timeout';
   const credentialsSpecifier = '@deepseek-ai/dsh-credentials';
   const subagentSpecifier = '@deepseek-ai/dsh-subagent';
@@ -31,6 +32,7 @@ export async function preloadRegistryModules(importModule: (specifier: string) =
     settings,
     llm,
     tools,
+    toolPipeline,
     timeout,
     credentials,
     subagent,
@@ -47,6 +49,7 @@ export async function preloadRegistryModules(importModule: (specifier: string) =
     load(settingsSpecifier),
     load(llmSpecifier),
     load(toolsSpecifier),
+    load(toolPipelineSpecifier),
     load(timeoutSpecifier),
     load(credentialsSpecifier),
     load(subagentSpecifier),
@@ -65,6 +68,7 @@ export async function preloadRegistryModules(importModule: (specifier: string) =
     settings: settings as RegistryModules['settings'],
     llm: llm as RegistryModules['llm'],
     tools: tools as RegistryModules['tools'],
+    toolPipeline: toolPipeline as RegistryModules['toolPipeline'],
     timeout: timeout as RegistryModules['timeout'],
     credentials: credentials as RegistryModules['credentials'],
     subagent: subagent as RegistryModules['subagent'],

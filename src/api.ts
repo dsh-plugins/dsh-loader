@@ -72,7 +72,7 @@ export function createHostAPI(opts: {
   const patch: PatchAPI = createPatchAPI(ctx);
   const registry: RegistryAPI =
     (adapter?.registry as RegistryAPI | undefined) ?? createRegistryAPI({ ctx, modules: registryModules });
-  const llm: LlmAPI = adapter?.llm ?? createLlmAPI({ module: registryModules?.llm });
+  const llm: LlmAPI = adapter?.llm ?? createLlmAPI({ module: registryModules?.llm, patch });
   const dsh: DshSymbolsAPI = adapter?.dsh ?? createDshSymbolsAPI({ modules: registryModules });
   // The shell facades name no dsh service shape beyond `ctx.get(...)`, so no
   // adapter override seam exists: the seam difference is DATA (PatchMetadata

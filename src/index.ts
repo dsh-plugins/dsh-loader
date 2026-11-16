@@ -233,6 +233,7 @@ export { SessionHostError } from './sessions.js';
 export type { SessionsAPI, SessionSnapshot, SessionStatus, SessionPendingMessage, SessionChange, SessionExclusive } from './sessions.js';
 
 export type { HostAPI, CordisContext, SettingsAPI, WebAPI, ServicesAPI, HostAdapter, HostAdapterConfig, AdapterFactory } from './types.js';
+export type { ResponsesToolAddition, ResponsesToolAdditionRecord, ResponsesToolRequest, ResponsesToolProjector, ResponsesFunctionTool } from './responses-tools.js';
 export type {
   ShellFacade,
   SandboxFacade,

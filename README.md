@@ -27,6 +27,8 @@ dsh-loader **2.0.0** provides independent adapters for dsh patch releases, stabl
 
 Supported patch families: `0.1.5`, `0.1.6`, `0.1.7`, `0.2.0`, `0.2.1`, `0.2.2`, including prereleases. The published release inventory and dependency resolution are frozen on 2026-10-30. Unknown patches, majors, and older versions are rejected. Requires Node >=24.9.0.
 
+原生 Responses 动态工具追加接口见 [Responses 声明投影](docs/responses-tools.md)：保持顶层工具列表不变，在可信消息原位置生成 `additional_tools`。
+
 ### Install
 
 ```sh

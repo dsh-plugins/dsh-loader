@@ -94,7 +94,8 @@ export interface RegistryModules {
    */
   llm?: import('./llm.js').LlmModule;
   /** `@deepseek-ai/dsh-tools` — `defineTool` / `ToolArgsError` are module-level. */
-  tools?: { defineTool?: unknown; ToolArgsError?: unknown };
+  tools?: import('./dsh-symbols.js').DshSymbolModules['tools'];
+  toolPipeline?: import('./dsh-symbols.js').DshSymbolModules['toolPipeline'];
   /** `@deepseek-ai/dsh-timeout` — `deadline` / `MAX_TIMER_DELAY_MS`. */
   timeout?: { deadline?: unknown; MAX_TIMER_DELAY_MS?: number };
   /** `@deepseek-ai/dsh-credentials` — `credentialRef`. */

@@ -13,6 +13,10 @@
  * @module @dsh-plugin/dsh-loader/services/llm
  */
 import { LOG_PREFIX } from '../../version.js';
+import type { CordisContext } from '../../types.js';
+import type { PatchAPI } from '../../patch.js';
+import type { ResponsesToolProjector } from '../../responses-tools.js';
+import { registerResponsesToolAdditions } from '../../responses-stream.js';
 
 /** The `@deepseek-ai/dsh-llm` surface the facades forward to. */
 export interface LlmModule {
@@ -24,6 +28,8 @@ export interface LlmModule {
 
 /** The `llm` facade exposed on the host API. */
 export interface LlmAPI {
+  /** 将插件拥有的持久化声明投影到 Responses HTTP input；返回卸载函数。 */
+  registerResponsesToolAdditions(owner: CordisContext, project: ResponsesToolProjector): () => void;
   /**
    * Build one identified, frozen user-role message.
    *
@@ -43,9 +49,13 @@ export interface LlmAPI {
 }
 
 /** Build the `ctx.dshLoader.llm` facade. */
-export function createLlmAPI(opts: { module?: LlmModule }): LlmAPI {
+export function createLlmAPI(opts: { module?: LlmModule; patch?: PatchAPI }): LlmAPI {
   const { module } = opts;
   return {
+    registerResponsesToolAdditions(owner, project) {
+      if (!opts.patch) { throw new Error(`${LOG_PREFIX}: Responses 声明需要 loader.patch`); }
+      return registerResponsesToolAdditions(opts.patch, owner, project);
+    },
     createUserMessage(input) {
       const make = module?.createUserMessage;
       if (typeof make !== 'function') {
@@ -57,7 +67,7 @@ export function createLlmAPI(opts: { module?: LlmModule }): LlmAPI {
     },
     deepFreeze(value) {
       const freeze = module?.deepFreeze;
-      if (typeof freeze === 'function') return freeze(value);
+      if (typeof freeze === 'function') { return freeze(value); }
       return Object.freeze(value);
     },
   };
