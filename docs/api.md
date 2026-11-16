@@ -117,6 +117,8 @@ dsh.subprocess: {
 
 会话扩展通过 `getSessionClient(ctx).registerMessageExtension({ id, Message, forkedTurnLabels? })` 注册。`forkedTurnLabels` 可提供本地化的 `label` 和 `duration` 标题，后者用于拼接官方用时。启用后，官方原因是 `forked` 的轮次改用这组标题，`turnProcess.hasContent` 为 `false` 时省略提示。有工具、思考或其他处理内容的轮次保留官方展开行为和完整日志；扩展注销后恢复官方标题。
 
+会话客户端扩展支持 DSH `0.2.2-rc.1`、`0.2.2-rc.2` 和 `0.2.2-rc.3`。宿主启动脚本与客户端模块装饰器均须在官方 Chat 初始化前安装扩展。使用方需在 `inject` 中声明 `SESSION_CLIENT_SERVICE`（`dshLoaderSessionClient`）；缺少该服务时，插件会等待依赖，消息树和消息操作控件均不会注册。升级 loader 后须重启宿主，使启动脚本与客户端使用同一版本。
+
 ## 稳定模块子路径
 
 宿主：`tools`、`llm`、`agent`、`settings`、`timeout`、`subagent`、`credentials`、`compaction-basic`，分别有 import/require 出口。实际可用符号受所选 patch 和已安装模块能力约束，缺失时报明确错误。新的跨版本业务优先使用 HostAPI facade。

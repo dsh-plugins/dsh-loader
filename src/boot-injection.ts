@@ -57,7 +57,7 @@ if(w[F])return;
 var A=${table};
 var ids=Object.keys(A);
 function reg(loader){
-${boot && ['0.2.2-rc.1', '0.2.2-rc.2'].includes(boot.dshVersion) ? `var wrappedLoad;
+${boot && ['0.2.2-rc.1', '0.2.2-rc.2', '0.2.2-rc.3'].includes(boot.dshVersion) ? `var wrappedLoad;
 function wrapLoad(){
 if(loader.load===wrappedLoad)return;
 var load=loader.load;
