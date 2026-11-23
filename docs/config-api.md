@@ -126,6 +126,8 @@ const selection = handle.get().value.assistantModel;
 
 `/api/dshloader/config` 提供 list/read/update/reset 与 `/events` SSE。只暴露当前注册的模板。请求使用宿主 `connection.authorizeIndex` 的浏览器认证，并拒绝跨站请求；宿主认证服务不可用时返回 503。订阅重连后重新读取，不依赖 `exposeAllNamespaces`。
 
+客户端插件声明 `inject = ['dshLoaderUi']` 后，可用 `ctx.dshLoaderUi.configClient` 读取自身配置。调用 `read(configId)` 获取已保存值，使用 `subscribe(listener)` 接收配置变更和桥接重连通知，然后重新读取对应 ID。订阅返回取消函数，调用方应在卸载时取消订阅并丢弃迟到的读取结果。配置客户端由 loader 持有，调用方不应调用 `dispose()`。
+
 ## 统一页面
 
 - dsh 0.1.5 系列、0.1.6-alpha.1：更多 → 设置 → 插件配置。

@@ -42,6 +42,12 @@ DSH 客户端模块表的同步 `require` 解析顺序是「seed 词 → 已物�
 
 `exports["./client"].types` 指向 `lib/types/client-ui.d.ts`（由 `tsconfig.client.types.json` 发出），所以上面的 `import type` 是**真实类型**，不需要手写 cast。
 
+### 输入框模型选择器
+
+在 DSH 0.2.2-rc.3 及提供相同模型插槽接口的后续版本中，`ctx.dshLoaderUi.composerModel.register(ctx, Component)` 可替换输入框右下角的原生模型选择器。客户端插件声明 `inject = ['dshLoaderUi']`，并在 `dsh.client.inject` 中包含 `@dsh-plugin/dsh-loader`。在 `ctx.effect` 中注册，或提前调用返回的函数恢复原生组件。`/model` 与会话输入的其余部分继续使用宿主行为。
+
+组件接收 `ComposerModelProps`。通过 `directory.subscribe`、`directory.getSnapshot` 读取与 `/model` 共用的模型目录；用 `load()` 重试加载，用 `select()` 提交当前会话的模型和推理等级。组件应遵守 `locked` 和目录的待提交状态。`team.state` 提供已保存的开关状态；只有 `available` 时才应显示团队操作，关闭团队时若 `requiresDisableConfirmation` 为真，调用方须先确认。写入失败会拒绝 Promise，显示值应继续读取宿主快照。
+
 ### 共享 Arco Design 控件
 
 附属插件通过同一入口导入 `Arco` 命名空间，使用 `@arco-design/web-react` 提供的全部组件、组合组件和类型：

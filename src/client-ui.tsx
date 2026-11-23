@@ -1,7 +1,7 @@
 export * from './ui/client-compat.js';
 export * from './session-client.js';
 import { wrapSessionChatPlugin } from './session-client.js';
-import { createConfigClient } from './config-client.js';
+import { createConfigClient, type ConfigClient } from './config-client.js';
 import { installConfigUI } from './ui/config-form.js';
 import { createConfigModelSource } from './ui/config-model-source.js';
 import { createConfigDialogs, type ConfigDialogsAPI } from './ui/config-dialogs.js';
@@ -150,8 +150,10 @@ export function apply(ctx: ClientContextLike): void {
   if (api) resources.add(api.dispose);
 
   let dialogs: ConfigDialogsAPI | undefined;
+  let configClient: ConfigClient | undefined;
   if (api) {
     const client = createConfigClient(window.fetch.bind(window), url => new EventSource(url), `${api.boot.bridgePrefix}/config`);
+    configClient = client;
     const loadModels = createConfigModelSource(ctx);
     dialogs = createConfigDialogs(client);
     resources.add(dialogs.dispose);
@@ -170,7 +172,7 @@ export function apply(ctx: ClientContextLike): void {
   // activate unchanged on every dsh line.
   installConversationEventsCompat(ctx);
 
-  const currentUi = createUi({ config: dialogs });
+  const currentUi = createUi({ config: dialogs, configClient });
   // Expose cordis service reads through the UI facade so plugins can reach
   // built-in services (e.g. `slots`, `sessions`) without declaring their own
   // inject entries, which would change their activation ordering.

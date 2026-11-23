@@ -11,8 +11,10 @@
  */
 import { BUILTIN_ANCHORS, readLayoutFrame, type BuiltinAnchor, type LayoutFrameState } from './anchors.js';
 import { createUiAPI, type CreateUiOptions, type UiAPI } from './slots.js';
-import { createConfigClient } from '../config-client.js';
+import { createConfigClient, type ConfigClient } from '../config-client.js';
 import { createConfigDialogs, type ConfigDialogsAPI } from './config-dialogs.js';
+import { createComposerModel, type ComposerModel } from './composer-model.js';
+export type { ComposerModel, ComposerModelOwner, ComposerModelProps, ComposerModelSelection, ComposerModelSnapshot, ComposerModelGroup, ComposerModelOption, ComposerTeamSnapshot } from './composer-model.js';
 
 export * from './slots.js';
 export * from './anchors.js';
@@ -31,6 +33,10 @@ export type { ConfigModelSource, ConfigModelList, ConfigModelGroup, ConfigModelO
 /** The `ui` facade plus the built-in anchor helpers. */
 export interface DshLoaderUi extends UiAPI {
   config: ConfigDialogsAPI;
+  /** 已挂载的配置桥接客户端，供插件读取和订阅自己的配置。 */
+  configClient?: ConfigClient;
+  /** 在 DSH Web 输入栏替换原生模型选择器。 */
+  composerModel: ComposerModel;
   /** Read the shell's sidebar layout state, when the anchor resolves. */
   layoutFrame(): LayoutFrameState | undefined;
   /**
@@ -47,16 +53,19 @@ export interface DshLoaderUi extends UiAPI {
  *
  * @param options - forwarded to {@link createUiAPI} (observe root, warn sink).
  */
-export function createUi(options: CreateUiOptions & { config?: ConfigDialogsAPI } = {}): DshLoaderUi {
+export function createUi(options: CreateUiOptions & { config?: ConfigDialogsAPI; configClient?: ConfigClient } = {}): DshLoaderUi {
   const api = createUiAPI(options);
-  const ownClient = options.config ? undefined : createConfigClient((url, init) => globalThis.fetch(url, init));
-  const config = options.config ?? createConfigDialogs(ownClient!);
+  const ownClient = options.config || options.configClient ? undefined : createConfigClient((url, init) => globalThis.fetch(url, init));
+  const configClient = options.configClient ?? ownClient;
+  const config = options.config ?? createConfigDialogs(configClient!);
   for (const [name, spec] of Object.entries(BUILTIN_ANCHORS)) {
     api.defineAnchor(name as BuiltinAnchor, spec);
   }
   return {
     ...api,
     config,
+    configClient,
+    composerModel: createComposerModel(),
     // Methods that close over engine state must be re-bound, not spread-copied
     // as plain values — `mountReact` calls `this.mount`, so keep the object.
     mount: api.mount.bind(api),
