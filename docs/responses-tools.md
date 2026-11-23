@@ -32,7 +32,11 @@ interface ResponsesToolAdditionRecord {
 
 转换只接受一个对应的 Responses `user` input 项，其 content 为原始字符串或单个 `input_text` 块。适配器若合并、拆分、丢弃或改写该消息，接口会报告映射诊断，不猜测声明位置。普通用户文本中的 JSON 从不作为工具来源。
 
-替换项为 `{type: 'additional_tools', role: 'developer', tools: addition.tools}`，其余 input 项、调用 ID、顺序和请求参数保持不变。单次 `llm/stream` 的转换状态独立保存；已投影的 input 与原始请求重试均可重复处理，不重复追加。
+默认替换项为 `{type: 'additional_tools', role: 'developer', tools: addition.tools}`，其余 input 项、调用 ID、顺序和请求参数保持不变。
+
+调用 `loader.llm.registerResponsesToolAdditions(owner, project, { preferTopLevel: true })` 时，loader 先完整校验原记录，再按实际 HTTP 请求顶层 `tools` 中的函数名称过滤同名追加项。批次仍有其他工具时保持原位置；没有剩余工具时省略该项。顶层 `tools` 和持久化历史均不修改。调用插件可检查 `loader.llm.responsesToolAdditionsPreferTopLevel === true` 确认当前版本支持此选项。
+
+单次 `llm/stream` 的转换状态独立保存。原始请求和顶层函数名集合未变化的已转换请求均可重复处理；若重试更改了顶层函数名集合，必须重新提供原始 input。
 
 请求作用域覆盖异步迭代器的 `next`、`return`、`throw`，fetch 通过现有补丁链注册。卸载先取消活动请求，待迭代器结束后还原补丁，阻止 SDK 重试越过转换。HTTP 错误保留状态码并补充原生策略诊断，不触发顶层声明回退。
 

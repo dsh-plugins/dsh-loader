@@ -35,6 +35,12 @@ export interface ResponsesToolRequest {
 /** 返回本插件拥有的声明；undefined 表示此请求不参与转换。 */
 export type ResponsesToolProjector = (request: ResponsesToolRequest) => readonly ResponsesToolAdditionRecord[] | undefined;
 
+/** Controls how trusted historical declarations reach the HTTP request. */
+export interface ResponsesToolProjectionOptions {
+  /** Keep the serialized top-level function definition when a persisted addition uses the same name. */
+  readonly preferTopLevel?: boolean;
+}
+
 function object(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown> : undefined;
@@ -68,11 +74,13 @@ function contentText(value: unknown, type: string): string | undefined {
 /** 每次 llm/stream 独享一份映射；重试复用已验证的 input，不能跨请求继承。 */
 export class ResponsesToolProjection {
   private readonly records: readonly ResponsesToolAdditionRecord[];
-  private readonly projectedInputs = new Set<string>();
+  private readonly projectedInputs = new Map<string, Set<string>>();
+  private readonly preferTopLevel: boolean;
 
   /** 快照并验证可信来源，后续重试不再读取可变插件状态。 */
-  constructor(messages: readonly unknown[], records: readonly ResponsesToolAdditionRecord[]) {
+  constructor(messages: readonly unknown[], records: readonly ResponsesToolAdditionRecord[], options: ResponsesToolProjectionOptions = {}) {
     this.records = structuredClone(records);
+    this.preferTopLevel = options.preferTopLevel === true;
     const ids = new Set<string>();
     const messageIds = new Set<string>();
     const markers = markerCounts(messages);
@@ -113,8 +121,18 @@ export class ResponsesToolProjection {
     try { parsed = JSON.parse(body); } catch { return fail('请求体不是 JSON'); }
     const request = object(parsed);
     if (!request || !Array.isArray(request.input)) { fail('Responses 请求缺少 input 数组'); }
+    const topLevel = new Set<string>();
+    if (this.preferTopLevel && Array.isArray(request.tools)) {
+      for (const value of request.tools) {
+        const tool = object(value);
+        if (tool?.type === 'function' && typeof tool.name === 'string') { topLevel.add(tool.name); }
+      }
+    }
+    const topLevelKey = JSON.stringify([...topLevel].sort());
     const inputKey = JSON.stringify(request.input);
-    if (this.projectedInputs.has(inputKey)) { return body; }
+    const known = this.projectedInputs.get(inputKey);
+    if (known?.has(topLevelKey)) { return body; }
+    if (known) { fail('已转换的 input 与当前顶层工具不匹配'); }
     const input = [...request.input];
     const markers = markerCounts(input);
     const positions = new Map<string, number>();
@@ -125,15 +143,25 @@ export class ResponsesToolProjection {
       if (text !== undefined) { positions.set(text, index); }
     });
     let previousIndex = -1;
+    const omitted = new Set<number>();
     for (const record of this.records) {
       const marker = responsesToolMarker(record.addition.id);
       if (markers.get(marker) !== 1) { fail(`input 标识缺失或重复 ${record.addition.id}`); }
       const index = positions.get(record.text);
       if (index === undefined || index <= previousIndex) { fail(`input 内容或顺序不匹配 ${record.addition.id}`); }
       previousIndex = index;
-      input[index] = { type: 'additional_tools', role: 'developer', tools: record.addition.tools };
+      const tools = record.addition.tools.filter(tool => !topLevel.has(tool.name));
+      if (tools.length > 0) {
+        input[index] = { type: 'additional_tools', role: 'developer', tools };
+      } else {
+        omitted.add(index);
+      }
     }
-    this.projectedInputs.add(JSON.stringify(input));
-    return JSON.stringify({ ...request, input });
+    const projected = omitted.size === 0 ? input : input.filter((_, index) => !omitted.has(index));
+    const projectedKey = JSON.stringify(projected);
+    const scopes = this.projectedInputs.get(projectedKey) ?? new Set<string>();
+    scopes.add(topLevelKey);
+    this.projectedInputs.set(projectedKey, scopes);
+    return JSON.stringify({ ...request, input: projected });
   }
 }

@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { CordisContext } from './types.js';
 import type { PatchAPI } from './patch.js';
-import { ResponsesToolProjection, type ResponsesToolProjector, type ResponsesToolRequest } from './responses-tools.js';
+import { ResponsesToolProjection, type ResponsesToolProjectionOptions, type ResponsesToolProjector, type ResponsesToolRequest } from './responses-tools.js';
 
 interface RequestScope {
   readonly request: ResponsesToolRequest;
@@ -15,8 +15,10 @@ export function registerResponsesToolAdditions(
   patch: PatchAPI,
   owner: CordisContext,
   project: ResponsesToolProjector,
+  options: ResponsesToolProjectionOptions = {},
 ): () => void {
   if (!owner.on) { throw new Error('dsh-loader: 注册 Responses 声明需要 llm/stream 事件'); }
+  const projectionOptions = { preferTopLevel: options.preferTopLevel === true };
   const storage = new AsyncLocalStorage<RequestScope>();
   const active = new Set<RequestScope>();
   let disposed = false;
@@ -85,7 +87,7 @@ export function registerResponsesToolAdditions(
       const records = project(request);
       if (!records?.length) { return withoutScope(next); }
       if (!request.sessionId) { throw new Error('dsh-loader: Responses 声明缺少 sessionId'); }
-      const scope: RequestScope = { request, projection: new ResponsesToolProjection(request.messages, records), abort: new AbortController(), handled: false };
+      const scope: RequestScope = { request, projection: new ResponsesToolProjection(request.messages, records, projectionOptions), abort: new AbortController(), handled: false };
       let iterator: AsyncIterator<unknown> | undefined;
       let finished = false;
       const finish = (): void => { finished = true; active.delete(scope); releaseIfIdle(); };

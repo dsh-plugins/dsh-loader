@@ -15,7 +15,7 @@
 import { LOG_PREFIX } from '../../version.js';
 import type { CordisContext } from '../../types.js';
 import type { PatchAPI } from '../../patch.js';
-import type { ResponsesToolProjector } from '../../responses-tools.js';
+import type { ResponsesToolProjectionOptions, ResponsesToolProjector } from '../../responses-tools.js';
 import { registerResponsesToolAdditions } from '../../responses-stream.js';
 
 /** The `@deepseek-ai/dsh-llm` surface the facades forward to. */
@@ -28,8 +28,10 @@ export interface LlmModule {
 
 /** The `llm` facade exposed on the host API. */
 export interface LlmAPI {
+  /** 标记此 loader 支持顶层同名定义优先，供依赖方核对运行时能力。 */
+  readonly responsesToolAdditionsPreferTopLevel: true;
   /** 将插件拥有的持久化声明投影到 Responses HTTP input；返回卸载函数。 */
-  registerResponsesToolAdditions(owner: CordisContext, project: ResponsesToolProjector): () => void;
+  registerResponsesToolAdditions(owner: CordisContext, project: ResponsesToolProjector, options?: ResponsesToolProjectionOptions): () => void;
   /**
    * Build one identified, frozen user-role message.
    *
@@ -52,9 +54,10 @@ export interface LlmAPI {
 export function createLlmAPI(opts: { module?: LlmModule; patch?: PatchAPI }): LlmAPI {
   const { module } = opts;
   return {
-    registerResponsesToolAdditions(owner, project) {
+    responsesToolAdditionsPreferTopLevel: true,
+    registerResponsesToolAdditions(owner, project, options) {
       if (!opts.patch) { throw new Error(`${LOG_PREFIX}: Responses 声明需要 loader.patch`); }
-      return registerResponsesToolAdditions(opts.patch, owner, project);
+      return registerResponsesToolAdditions(opts.patch, owner, project, options);
     },
     createUserMessage(input) {
       const make = module?.createUserMessage;

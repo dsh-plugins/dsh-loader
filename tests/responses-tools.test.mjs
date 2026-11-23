@@ -5,6 +5,7 @@ import { once } from 'node:events';
 import { ResponsesToolProjection, responsesToolMarker } from '../dist/responses-tools.js';
 import { registerResponsesToolAdditions } from '../dist/responses-stream.js';
 import { createPatchAPI } from '../dist/patch.js';
+import { createLlmAPI } from '../dist/adapters/shared/llm.js';
 
 function record(id, name = id, description = '定义') {
   const addition = { version: 1, id, tools: [{ type: 'function', name, description, parameters: { type: 'object', properties: {}, additionalProperties: false }, strict: false }] };
@@ -119,6 +120,42 @@ test('HTTP/SSE 模拟服务验证并发会话、别名路由、网络重试和 R
   assert.equal(requests.at(-1).input[0].content, '普通请求');
   dispose();
   assert.equal(globalThis.fetch, original);
+});
+
+test('已启用顶层优先时按 HTTP 请求的函数名过滤旧批次', async t => {
+  const { url, requests } = await mockServer(t);
+  const ctx = owner();
+  const covered = record('covered', 'pwsh', '旧命令定义');
+  const mixed = record('mixed', 'late');
+  mixed.addition.tools.unshift(record('other', 'edit', '旧编辑定义').addition.tools[0]);
+  mixed.text = `${responsesToolMarker(mixed.addition.id)}\n${JSON.stringify(mixed.addition.tools)}`;
+  const records = [covered, mixed];
+  const messages = records.map(message);
+  const topLevel = ['pwsh', 'edit'].map(name => ({ type: 'function', name, description: '新版定义', parameters: { type: 'object' } }));
+  const before = { role: 'user', content: '开始' };
+  const reference = { type: 'function_call', call_id: 'call-1', name: 'pwsh', arguments: '{}' };
+  const body = { tools: topLevel, input: [before, wire(covered), reference, wire(mixed)] };
+  const original = JSON.stringify(records);
+
+  const defaultProjection = new ResponsesToolProjection(messages, records);
+  assert.equal(JSON.parse(defaultProjection.rewrite(JSON.stringify(body))).input[1].tools[0].name, 'pwsh');
+  const projection = new ResponsesToolProjection(messages, records, { preferTopLevel: true });
+  assert.throws(() => projection.rewrite(JSON.stringify({ ...body, input: [before, reference, wire(mixed)] })), /标识缺失/);
+  const projected = projection.rewrite(JSON.stringify(body));
+  assert.equal(projection.rewrite(projected), projected);
+  assert.throws(() => projection.rewrite(JSON.stringify({ ...JSON.parse(projected), tools: [] })), /顶层工具不匹配/);
+  assert.equal(JSON.parse(projection.rewrite(JSON.stringify({ ...body, tools: [] }))).input[1].tools[0].name, 'pwsh');
+
+  const llm = createLlmAPI({ patch: createPatchAPI() });
+  assert.equal(llm.responsesToolAdditionsPreferTopLevel, true);
+  const dispose = llm.registerResponsesToolAdditions(ctx, () => records, { preferTopLevel: true });
+  t.after(dispose);
+  const request = { provider: 'p', model: 'm', sessionId: 's', messages };
+  for await (const response of ctx.stream(request, async function* () {
+    yield await fetch(url, { method: 'POST', body: JSON.stringify(body) });
+  })) { await response.text(); }
+  assert.deepEqual(requests, [{ tools: topLevel, input: [before, reference, { type: 'additional_tools', role: 'developer', tools: [mixed.addition.tools[1]] }] }]);
+  assert.equal(JSON.stringify(records), original);
 });
 
 test('取消、插件卸载和不支持的传输不会泄漏声明作用域', async () => {
