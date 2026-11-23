@@ -3,7 +3,7 @@ import { preloadRegistryModules } from './modules.js';
 import { createLlmAPI } from '../services/llm.js';
 import { createPatchAPI } from '../patch.js';
 import { createDshSymbolsAPI } from '../services/dsh-symbols.js';
-import { browserAccess } from './http-access.js';
+import { browserAccess, registerNativeProtectedConfigRoute } from './http-access.js';
 import type { PatchMetadata } from './metadata.js';
 import { createAdaptedWebAPI } from './web.js';
 import { createSettingsAPI } from '../services/settings.js';
@@ -25,7 +25,9 @@ export function makePatchAdapter(client: PatchMetadata): AdapterFactory {
       const adapter: HostAdapter = {
         ...base, name: client.id, supports: client.patch,
         dispose: resources.dispose,
-        authorizeConfig: browserAccess(ctx),
+        ...(client.auth === 'native-route'
+          ? { registerProtectedConfigRoute: registerNativeProtectedConfigRoute(ctx) }
+          : { authorizeConfig: browserAccess(ctx) }),
         async apply() {
           adapter.modules = await preloadRegistryModules(ctx.get('loader')?.import?.bind(ctx.get('loader')));
           if (config?.boot) resources.add(installStableRuntime({ version: config.boot.dshVersion, adapterId: client.id, modules: { ...adapter.modules } }));

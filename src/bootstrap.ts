@@ -1,4 +1,5 @@
 import { clientAdapters } from './adapters/client.js';
+import { nearestLowerPatch, patchFamily } from './adapters/patch-fallback.js';
 import { LOADER_VERSION } from './version.js';
 export const BRIDGE_PREFIX = '/api/dshloader';
 export interface BootDescriptor {
@@ -12,8 +13,10 @@ export interface BootDescriptor {
   capabilities: { config: true; configUI: 'settings' | 'plugins' };
 }
 export function createBootDescriptor(dshVersion: string, adapterId: string, exposeAllNamespaces = false): BootDescriptor {
-  const adapter = clientAdapters.find(entry => entry.id === adapterId);
-  if (!adapter || dshVersion.split('-')[0].split('+')[0] !== adapter.patch) throw new Error(`Unsupported adapter ${adapterId} for dsh ${dshVersion}`);
+  const family = patchFamily(dshVersion);
+  const adapter = clientAdapters.find(entry => entry.patch === family)
+    ?? nearestLowerPatch(dshVersion, clientAdapters, entry => entry.patch);
+  if (!adapter || adapter.id !== adapterId) throw new Error(`Unsupported adapter ${adapterId} for dsh ${dshVersion}`);
 
   return {
     protocolVersion: 2, loaderVersion: LOADER_VERSION, dshVersion, adapterId, exposeAllNamespaces,

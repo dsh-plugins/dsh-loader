@@ -1,6 +1,6 @@
 # 从 dsh-loader 1.x 迁移到 2.0.0
 
-1. 将插件 peerDependency 改为 `@dsh-plugin/dsh-loader: ^2.0.0`，使用 Node >=24.9.0。确认 dsh 位于[支持表](support.md)的六个 patch 系列中；未知 patch 和主版本不再回退。
+1. 将插件 peerDependency 改为 `@dsh-plugin/dsh-loader: ^2.0.0`，使用 Node >=24.9.0。确认 dsh 位于[支持表](support.md)的内置 patch 系列中；未匹配的 patch 只会尝试同一主版本较低的最近适配器。
 2. 新插件配置使用 [config-api](config-api.md)。注册时传入插件自己的 Cordis 上下文；配置 ID 不使用 npm 包名中的 `/`。旧插件文件不会自动移动或删除，按插件自行决定迁移策略。
 3. 删除由插件自行维护的设置表单。提供可序列化字段模板，loader 决定入口、卡片、label 和分组布局；不要再为同一模板自行注册 native 配置槽位。
 4. 客户端启动必须使用宿主生成的协议 2 描述。升级后重新加载页面，旧的客户端缓存不能与 2.0 宿主混用。禁止用客户端选项覆盖宿主的适配器或设置开关。

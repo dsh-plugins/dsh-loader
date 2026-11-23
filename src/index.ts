@@ -113,7 +113,7 @@ export function readLoaderConfig(opts: { profileDir?: string; config?: Partial<L
 interface AdapterSelectionResult {
   registry: AdapterRegistry;
   factory: AdapterFactory;
-  mode: 'exact' | 'range';
+  mode: 'exact' | 'range' | 'fallback';
   dshVersion: string;
 }
 
@@ -182,8 +182,12 @@ export async function applyAdapter(
     registryModules,
     configStore: store,
   });
-  if (!adapter.authorizeConfig) throw new Error('dshloader: adapter lacks browser access control');
-  resources.add(installConfigBridge(api.web, store, adapter.authorizeConfig));
+  if (adapter.registerProtectedConfigRoute) {
+    resources.add(installConfigBridge({ register: adapter.registerProtectedConfigRoute }, store));
+  } else {
+    if (!adapter.authorizeConfig) throw new Error('dshloader: adapter lacks browser access control');
+    resources.add(installConfigBridge(api.web, store, adapter.authorizeConfig));
+  }
   ctx.reflect.provide('dshLoader', api);
 
   let preferNewest = config.preferNewestMarketVersion;

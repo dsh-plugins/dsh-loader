@@ -5,22 +5,22 @@ import vm from 'node:vm';
 import { registerHostAdapters, hostAdapters } from '../dist/adapters/index.js';
 import { clientAdapters } from '../dist/adapters/client.js';
 import { AdapterRegistry } from '../dist/registry.js';
-import { createBootDescriptor } from '../dist/bootstrap.js';
+import { createBootDescriptor, validateBoot } from '../dist/bootstrap.js';
 import { buildBootAliasScript } from '../dist/boot-injection.js';
 import { installClient } from '../dist/client.js';
 import { createAdaptedWebAPI } from '../dist/adapters/web.js';
-import { browserAccess } from '../dist/adapters/http-access.js';
+import { browserAccess, registerNativeProtectedConfigRoute } from '../dist/adapters/http-access.js';
 import { makeMockCtx, makeMockWindow } from './helpers/mock.mjs';
 
 const published = JSON.parse(await readFile(new URL('./fixtures/upstream-releases.json', import.meta.url)));
 const resolved = JSON.parse(await readFile(new URL('./fixtures/resolved-contracts.json', import.meta.url)));
 const lock = JSON.parse(await readFile(new URL('./fixtures/upstream/package-lock.json', import.meta.url)));
 const registry = registerHostAdapters(new AdapterRegistry());
-test('six independent patch entries exactly cover the frozen release inventory', () => {
-  assert.deepEqual(hostAdapters.map(a => a.supports), ['0.1.5','0.1.6','0.1.7','0.2.0','0.2.1','0.2.2']);
+test('registered patch entries include the frozen inventory plus 0.2.3', () => {
+  assert.deepEqual(hostAdapters.map(a => a.supports), ['0.1.5','0.1.6','0.1.7','0.2.0','0.2.1','0.2.2','0.2.3']);
   assert.deepEqual(Object.keys(published.versions).sort(), Object.keys(resolved.releases).sort());
   assert.equal(Object.keys(lock.packages[''].dependencies).length, 24);
-  for (const value of ['0.1.4','0.1.4-rc.99','0.1.8','0.2.3-alpha.1','1.0.0','2.0.0']) assert.throws(() => registry.select(value), /no adapter|too old/);
+  for (const value of ['0.1.4','0.1.4-rc.99','1.0.0','2.0.0']) assert.throws(() => registry.select(value), /no adapter|too old/);
 });
 for (const version of Object.keys(published.versions)) test(`published dsh ${version}: selection, resolved capabilities, boot and client agree`, () => {
   const { factory } = registry.select(version);
@@ -74,4 +74,44 @@ test('HTTP middleware uses a disposable request-only wrapper on supported native
   const off = web.use((_req, _res, next) => { calls.push('middleware'); next(); next(); });
   server.emit('request', {}, {}); server.emit('upgrade'); off(); server.emit('request', {}, {});
   assert.deepEqual(calls, ['middleware','request','upgrade','request']);
+});
+
+test('0.2.3 prereleases use their own adapter; fallback uses the nearest lower adapter on both host and browser', () => {
+  for (const version of ['0.2.3-alpha.1', '0.2.3-alpha.2', '0.2.3']) {
+    const { factory } = registry.select(version);
+    assert.equal(factory.name, 'dsh-0.2.3');
+    assert.equal(validateBoot(createBootDescriptor(version, factory.name)).dshVersion, version);
+  }
+  const actual = '0.2.10-beta.2+ci';
+  const { factory, mode } = registry.select(actual);
+  assert.equal(factory.name, 'dsh-0.2.3');
+  assert.equal(mode, 'fallback');
+  const boot = createBootDescriptor(actual, factory.name);
+  assert.equal(boot.dshVersion, actual);
+  const { window } = makeMockWindow();
+  assert.equal(installClient({ window, boot }).boot.adapterId, factory.name);
+  assert.throws(() => validateBoot({ ...boot, adapterId: 'dsh-0.2.2' }), /Unsupported adapter/);
+  assert.throws(() => createBootDescriptor('0.2.2', 'dsh-0.2.3'), /Unsupported adapter/);
+});
+
+test('native config registration requires host auth and independently refuses missing or expired peers', async () => {
+  const { ctx, services } = makeMockCtx();
+  let row; let called = 0; let removed = false;
+  services.set('webServer', { register(route) { row = route; return () => { removed = true; }; } });
+  const off = registerNativeProtectedConfigRoute(ctx)('/api/dshloader/config', () => { called++; });
+  assert.equal(row.auth, 'required');
+  assert.equal(row.kind, 'prefix');
+  const expired = AbortSignal.abort();
+  for (const method of ['GET', 'POST']) {
+    for (const peer of [undefined, {}, { signal: expired }]) {
+      let status;
+      await row.handler({ method }, { writeHead(code) { status = code; }, end() {} }, peer);
+      assert.equal(status, 503);
+    }
+  }
+  assert.equal(called, 0);
+  await row.handler({}, {}, { signal: new AbortController().signal });
+  assert.equal(called, 1);
+  off();
+  assert.equal(removed, true);
 });

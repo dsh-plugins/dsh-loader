@@ -1,4 +1,4 @@
-// Shared host mechanisms; only the six patch entry points are registered.
+// Shared host mechanisms; only the versioned patch entry points are registered.
 import { LOG_PREFIX } from '../version.js';
 import { installBootAliasInjection } from '../boot-injection.js';
 import { toNamespaceView, settingsErrorToResult } from '../services/settings.js';

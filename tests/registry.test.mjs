@@ -27,10 +27,17 @@ test('TC-REG-01 exact version match returns mode exact', () => {
 // be a range match, not a fallback. To genuinely exercise the fallback path
 // (the case's stated intent) we use `~1.0.0` (= >=1.0.0 <1.1.0), so 1.5.0
 // falls above it.
-test('TC-REG-02 no exact match is rejected to nearest lower adapter', () => {
+test('TC-REG-02 unmatched patch chooses nearest lower numeric entry, never the upper one', () => {
   const reg = new AdapterRegistry();
-  reg.register(adapter('~1.0.0'));
-  assert.throws(() => reg.select('1.5.0'), UnsupportedDshVersionError);
+  for (const version of ['0.2.4', '0.1.7', '0.2.2', '0.2.10']) reg.register(adapter(version));
+  for (const version of ['0.2.3', '0.2.3-alpha.2+ci']) {
+    assert.equal(reg.select(version).factory.supports, '0.2.2');
+    assert.equal(reg.select(version).mode, 'fallback');
+  }
+  assert.equal(reg.select('0.2.9').factory.supports, '0.2.4');
+  assert.equal(reg.select('0.2.11').factory.supports, '0.2.10');
+  assert.throws(() => reg.select('1.0.0'), UnsupportedDshVersionError);
+  assert.throws(() => reg.select('0.1.6'), (error) => error.kind === 'too-old');
 });
 
 // TC-REG-03: empty registry �?UnsupportedDshVersionError (too new).

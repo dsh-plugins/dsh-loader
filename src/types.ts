@@ -63,6 +63,7 @@ export interface HostAdapter {
   llm?: any;
   dsh?: any;
   modules?: import('./services/registry.js').RegistryModules;
+  registerProtectedConfigRoute?: (prefix: string, handler: import('node:http').RequestListener) => () => void;
   authorizeConfig?: (request: import('node:http').IncomingMessage, response: import('node:http').ServerResponse) => boolean;
 }
 
@@ -79,7 +80,7 @@ export interface HostAdapterConfig {
 /** Result of AdapterRegistry.select(). */
 export interface AdapterSelection {
   factory: AdapterFactory;
-  mode: 'exact' | 'range';
+  mode: 'exact' | 'range' | 'fallback';
 }
 
 /** dshloader host API exposed as `ctx.dshLoader`. */

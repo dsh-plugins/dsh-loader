@@ -2,7 +2,7 @@
 
 ## 版本与启动
 
-宿主选择六个独立 patch 入口之一，patch 内的预发布差异写在各自客户端元数据中。公共机制放在 adapters/shared，不参与版本选择；没有跨 patch 或跨主版本回退。冻结数据与依赖树见[支持表](support.md)。
+宿主优先选择对应的独立 patch 入口，patch 内的预发布差异写在各自客户端元数据中。没有匹配入口时，仅尝试同一主版本内最近的较低 patch，并记录兼容性警告。公共机制放在 adapters/shared，不参与版本选择。冻结数据与依赖树见[支持表](support.md)。
 
 宿主生成协议 2 启动描述：loader/dsh 版本、adapterId、能力、别名、桥接地址、exposeAllNamespaces。安全 JSON 转义阻止脚本结束标签和 Unicode 行分隔符提前结束脚本。即使别名为空也注入描述；别名工厂在插件模块执行前注册，模块加载器晚到时由属性拦截器完成注册。客户端验证描述，只按宿主 ID 选适配器。
 
@@ -12,7 +12,7 @@
 
 `src/adapters/<patch>/index.ts` 是宿主入口，`client.ts` 是浏览器安全元数据。模块路径表、settings 差异、HTTP 路由和浏览器认证都在适配层；服务层只保留稳定入口。HostAdapter 可覆盖 settings、web、services、registry、llm 和 dsh。
 
-HTTP 方法路由规范化为宿主 exact 路由，并按方法分发；同路径注册按 token 保留覆盖关系。全局 middleware 包装宿主 Node HTTP request dispatch。配置桥接沿用 Connection 的浏览器 cookie 认证，不开放给未认证或跨站请求。
+HTTP 方法路由规范化为宿主 exact 路由，并按方法分发；同路径注册按 token 保留覆盖关系。全局 middleware 包装宿主 Node HTTP request dispatch。配置桥接沿用宿主浏览器认证：旧版本通过 Connection 验证，0.2.3 通过原生 WebServer 的必需鉴权与有效连接检查。不开放给未认证或跨站请求。
 
 ## 资源协议
 

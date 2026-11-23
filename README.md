@@ -25,7 +25,7 @@
 
 dsh-loader **2.0.0** provides independent adapters for dsh patch releases, stable host capability facades, client UI helpers, and a new configuration API with centrally generated forms.
 
-Supported patch families: `0.1.5`, `0.1.6`, `0.1.7`, `0.2.0`, `0.2.1`, `0.2.2`, including prereleases. The published release inventory and dependency resolution are frozen on 2026-10-30. Unknown patches, majors, and older versions are rejected. Requires Node >=24.9.0.
+Dedicated adapters: `0.1.5`, `0.1.6`, `0.1.7`, `0.2.0`, `0.2.1`, `0.2.2`, and `0.2.3` (including prereleases). If no adapter matches, Loader tries the nearest lower patch family in the same major and logs that compatibility is best effort. Versions below the minimum and unsupported majors are rejected. Requires Node >=24.9.0.
 
 原生 Responses 动态工具追加接口见 [Responses 声明投影](docs/responses-tools.md)：保持顶层工具列表不变，在可信消息原位置生成 `additional_tools`。
 

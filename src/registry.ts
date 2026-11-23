@@ -1,10 +1,11 @@
 /** Host-only adapter selection. Built-ins match one patch (including prereleases).
- * Unknown patches never fall back. Environment override is available for tests and diagnostics.
+ * An unmatched patch tries the nearest older numeric adapter in its major.
  */
 import { readFileSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { createRequire } from 'node:module';
 import semver from 'semver';
+import { nearestLowerPatch } from './adapters/patch-fallback.js';
 import { LOG_PREFIX } from './version.js';
 import type { AdapterFactory, AdapterSelection } from './types.js';
 
@@ -194,7 +195,13 @@ export class AdapterRegistry {
       }
     }
 
-    // Rule 4 vs 5: too old vs too new.
+    const fallback = nearestLowerPatch(version, this.adapters, factory => factory.supports);
+    if (fallback) {
+      console.warn(`${LOG_PREFIX} no matching adapter for dsh ${version}; using older adapter "${fallback.name}" (best effort)`);
+      return { factory: fallback, mode: 'fallback' };
+    }
+
+    // No compatible family: distinguish too old from an unsupported newer major.
     const minVersions = this.adapters
       .map((f) => rangeMinVersion(f.supports))
       .filter((v): v is string => v !== null)

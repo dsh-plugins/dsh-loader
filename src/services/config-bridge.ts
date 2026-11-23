@@ -3,7 +3,7 @@ import { ConfigError } from '../config.js';
 import type { WebAPI } from '../types.js';
 import type { ConfigStore } from './config.js';
 
-export function installConfigBridge(web: WebAPI, store: ConfigStore, authorize: (request: IncomingMessage, response: ServerResponse) => boolean): () => void {
+export function installConfigBridge(web: Pick<WebAPI, 'register'>, store: ConfigStore, authorize?: (request: IncomingMessage, response: ServerResponse) => boolean): () => void {
   const streams = new Set<ServerResponse>();
   const calls = new Set<AbortController>();
   const offEvents = store.subscribe(() => { for (const response of streams) response.write('event: change\ndata: {}\n\n'); });
@@ -11,7 +11,7 @@ export function installConfigBridge(web: WebAPI, store: ConfigStore, authorize: 
   try { offRoute = web.register('/api/dshloader/config', (request: IncomingMessage, response: ServerResponse) => {
     const json = (status: number, value: unknown) => { if (response.destroyed || response.writableEnded) return; response.statusCode = status; response.setHeader('content-type', 'application/json'); response.setHeader('cache-control', 'no-store'); response.end(JSON.stringify(value)); };
     return (async () => {
-      if (!authorize(request, response)) return;
+      if (authorize && !authorize(request, response)) return;
       const origin = request.headers.origin;
       if (request.headers['sec-fetch-site'] === 'cross-site' || (origin && new URL(origin).host !== request.headers.host)) { json(403, { ok: false, code: 'forbidden', message: 'Cross-origin config access denied' }); return; }
       const path = new URL(request.url ?? '/', 'http://localhost').pathname;

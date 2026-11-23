@@ -5,6 +5,8 @@ export interface PatchMetadata {
   moduleAliases: Record<string, string>;
   packageAliases: Record<string, string>;
   configUI(version: string): 'settings' | 'plugins';
+  /** Native WebServer verifies the browser peer before dispatch. */
+  auth?: 'native-route';
   settingsModel: 'namespaces' | 'forms';
   removedExports(version: string): Record<string, string[]>;
   /** The section the shell facade reads: its local executor packages and the executor seam. */

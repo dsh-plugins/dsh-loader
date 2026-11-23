@@ -273,7 +273,7 @@ test('every patch shell metadata uses the same pair of local packages and the ma
       { seam: metadata.shell.seam, localPackage: metadata.shell.localPackage },
     ]),
   );
-  assert.deepEqual([...seams.keys()], ['0.1.5', '0.1.6', '0.1.7', '0.2.0', '0.2.1', '0.2.2']);
+  assert.deepEqual([...seams.keys()], ['0.1.5', '0.1.6', '0.1.7', '0.2.0', '0.2.1', '0.2.2', '0.2.3']);
   for (const [patch, entry] of seams) {
     assert.deepEqual(
       entry.localPackage,
