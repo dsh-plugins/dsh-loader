@@ -44,6 +44,10 @@ npm install --prefix <profile-directory> <absolute-path-to-dsh-plugin-dsh-loader
 
 `shell` 与 `sandbox` 供需要自己实现 `ctx.shell` 的插件使用：`shell.base({ shellArgv })` 返回一个继承当前宿主本地执行器的类，插件只决定 argv，截止时间、输出上限、溢出文件和进程树终止全部沿用宿主；两代执行器接缝（0.1.5/0.1.6 的 `run`/`start` 与 0.1.7 起的 `execute`）由适配器元数据选择，插件不判版本。`sandbox` 归一化 `confine`、结果分类与升级词表。详见 [API](docs/api.md#shell-与-sandbox-门面)。
 
+### 宿主属主路由
+
+需要浏览器属主权限的插件可以从 `@dsh-plugin/dsh-loader` 导入 `ownerRoute`，在声明 `connection` 和 `webServer` 注入后，用 `ctx.webServer.register(ownerRoute(ctx.connection, route))` 注册 `exact` 或 `prefix` 路由。旧宿主使用 Connection 的请求拒绝结果；新版使用 WebServer 的认证准入，并要求活跃的属主 Peer。保留 `register` 返回的注销函数，由路由所属插件管理生命周期。
+
 ### 统一插件配置
 
 配置通过 `config.register(ownerCtx, template)` 声明，保存到 `<profile>/config/<插件ID>/config.json`，不依赖 `exposeAllNamespaces`。模板支持分组、嵌套对象和数组、密码、校验及声明式显隐。
