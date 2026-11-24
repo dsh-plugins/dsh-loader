@@ -8,34 +8,46 @@ export interface OwnerRoute {
   handler(request: IncomingMessage, response: ServerResponse): void | Promise<void>;
 }
 
-type ConnectionAdmission = {
-  requestRejection?(request: IncomingMessage): 401 | 403 | undefined;
-  admit?: unknown;
-};
-
 type BrowserPeer = {
   principal: { kind: string };
   signal: AbortSignal;
+};
+
+type ConnectionAdmission = {
+  admit?(request: IncomingMessage): { peer: BrowserPeer } | { rejection: 401 | 403 };
 };
 
 /**
  * 按宿主认证入口包装具备本机属主权限的路由。
  * 各版本都由宿主执行 Host、Origin 与身份检查；新版另明确拒绝非属主 Peer。
  */
-export function ownerRoute(connection: ConnectionAdmission | undefined, route: OwnerRoute) {
+export function ownerRoute(connection: ConnectionAdmission | (() => ConnectionAdmission | undefined) | undefined, route: OwnerRoute) {
   return {
     ...route,
     auth: 'required' as const,
     handler(request: IncomingMessage, response: ServerResponse, peer?: BrowserPeer) {
       let rejection: 401 | 403 | 503 | undefined;
-      if (typeof connection?.requestRejection === 'function') {
-        rejection = connection.requestRejection(request);
-      } else if (typeof connection?.admit !== 'function' || !peer?.signal || !peer.principal) {
-        rejection = 503;
-      } else if (peer.signal.aborted) {
-        rejection = 401;
-      } else if (peer.principal.kind !== 'owner') {
+      if (request.headers['sec-fetch-site'] === 'cross-site') {
         rejection = 403;
+      } else {
+        if (!peer) {
+          const current = typeof connection === 'function' ? connection() : connection;
+          const admission = current?.admit?.(request);
+          if (admission && 'rejection' in admission) {
+            rejection = admission.rejection;
+          } else {
+            peer = admission?.peer;
+          }
+        }
+        if (rejection === undefined) {
+          if (!peer?.signal || !peer.principal) {
+            rejection = 503;
+          } else if (peer.signal.aborted) {
+            rejection = 401;
+          } else if (peer.principal.kind !== 'owner') {
+            rejection = 403;
+          }
+        }
       }
       if (rejection !== undefined) {
         response.writeHead(rejection, { 'cache-control': 'no-store' });

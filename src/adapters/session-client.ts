@@ -61,9 +61,11 @@ interface SessionsFace {
   handleConnected(): void;
 }
 
+export const cordisRoot = Symbol.for('cordis.root');
+
 /** 仅依赖 Cordis 的公开服务读取与生命周期入口。 */
 export interface SessionClientContext {
-  readonly root?: SessionClientContext;
+  readonly [cordisRoot]?: SessionClientContext;
   get(name: string): unknown;
   provide?(name: string, value: unknown): unknown;
   effect?(effect: () => (() => void)): unknown;

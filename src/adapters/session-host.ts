@@ -1,4 +1,4 @@
-/** 将 0.2.2 的公开生命周期、消息入口与最终模型发送边界封装在宿主侧。 */
+/** 将会话生命周期、消息入口与模型请求协调封装在宿主侧。 */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import type { CordisContext } from '../types.js';
@@ -325,7 +325,7 @@ export function createSessionHost(ctx: CordisContext, options: SessionsOptions):
   }
 
   async function install(): Promise<void> {
-    if (options.version && !/^0\.2\.2(?:-|$)/.test(options.version)) {
+    if (options.version && !/^0\.2\.[23](?:[-+]|$)/.test(options.version)) {
       throw new SessionHostError('UNSUPPORTED_VERSION', `会话适配器尚未验证宿主版本 ${options.version}。`);
     }
     const load = options.importModule ?? (async (specifier: string) => import(specifier) as Promise<RecordValue>);

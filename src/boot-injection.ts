@@ -28,6 +28,7 @@
 import type { BootDescriptor } from './bootstrap.js';
 import { BOOT_ALIAS_IDS_FLAG } from './version.js';
 import type { CordisContext } from './types.js';
+import { supportsSessionClient } from './session-version.js';
 
 /** The `webserver/index-inject` event name (dsh ≥ 0.1.0-rc.x host webserver). */
 const INDEX_INJECT_EVENT = 'webserver/index-inject';
@@ -57,7 +58,7 @@ if(w[F])return;
 var A=${table};
 var ids=Object.keys(A);
 function reg(loader){
-${boot && ['0.2.2-rc.1', '0.2.2-rc.2', '0.2.2-rc.3'].includes(boot.dshVersion) ? `var wrappedLoad;
+${boot && supportsSessionClient(boot.dshVersion) ? `var wrappedLoad;
 function wrapLoad(){
 if(loader.load===wrappedLoad)return;
 var load=loader.load;

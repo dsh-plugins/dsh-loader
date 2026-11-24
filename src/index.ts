@@ -235,6 +235,7 @@ export async function apply(ctx: CordisContext, entryConfig?: Partial<LoaderConf
 export { LOADER_VERSION };
 export { SessionHostError } from './sessions.js';
 export { ownerRoute, type OwnerRoute } from './adapters/http-access.js';
+export type { ProfileAPI, PluginRegistrySnapshot } from './adapters/profile.js';
 export type { SessionsAPI, SessionSnapshot, SessionStatus, SessionPendingMessage, SessionChange, SessionExclusive } from './sessions.js';
 
 export type { HostAPI, CordisContext, SettingsAPI, WebAPI, ServicesAPI, HostAdapter, HostAdapterConfig, AdapterFactory } from './types.js';

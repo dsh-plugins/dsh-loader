@@ -10,7 +10,8 @@
 | --- | --- |
 | `config.register(ownerCtx, template)` | 独立配置与统一表单，返回 Promise<ConfigHandle<T>> |
 | `settings` | 宿主设置 describe/update/replace/mutate；旧 register/installSection 按实际宿主能力提供 |
-| `web` | prefix/exact、GET/POST/PUT/PATCH/DELETE、middleware、WebSocket upgrade，返回 disposer |
+| `web` | 注册 HTTP 和 WebSocket 路由。读写用户数据时使用 `registerOwner({ kind, path, handler })`，要求宿主准入且身份为属主，返回取消注册的方法 |
+| `profile` | 读取当前配置档目录和插件仓库顺序，按宿主配置修订更新顺序，并使用插件管理器共用的文件锁和原子写入 |
 | `services` | get 与单跳 alias |
 | `sessions` | 按需初始化的会话快照、待发状态、排他历史替换与发送拦截；使用前等待 `ready` |
 | `registry` | tools、sandbox、permission presets 兼容 facade |
@@ -117,7 +118,7 @@ dsh.subprocess: {
 
 会话扩展通过 `getSessionClient(ctx).registerMessageExtension({ id, Message, forkedTurnLabels? })` 注册。`forkedTurnLabels` 可提供本地化的 `label` 和 `duration` 标题，后者用于拼接官方用时。启用后，官方原因是 `forked` 的轮次改用这组标题，`turnProcess.hasContent` 为 `false` 时省略提示。有工具、思考或其他处理内容的轮次保留官方展开行为和完整日志；扩展注销后恢复官方标题。
 
-会话客户端扩展支持 DSH `0.2.2-rc.1`、`0.2.2-rc.2` 和 `0.2.2-rc.3`。宿主启动脚本与客户端模块装饰器均须在官方 Chat 初始化前安装扩展。使用方需在 `inject` 中声明 `SESSION_CLIENT_SERVICE`（`dshLoaderSessionClient`）；缺少该服务时，插件会等待依赖，消息树和消息操作控件均不会注册。升级 loader 后须重启宿主，使启动脚本与客户端使用同一版本。
+会话客户端扩展支持 DSH `0.2.2-rc.1` 至 `0.2.2-rc.3` 及 `0.2.3-alpha.2`。宿主启动脚本与客户端模块装饰器均须在官方 Chat 初始化前安装扩展。使用方需在 `inject` 中声明 `SESSION_CLIENT_SERVICE`（`dshLoaderSessionClient`）；缺少该服务时，插件会等待依赖，消息树和消息操作控件均不会注册。升级 loader 后须重启宿主，使启动脚本与客户端使用同一版本。
 
 ## 稳定模块子路径
 

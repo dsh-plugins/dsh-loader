@@ -1,5 +1,6 @@
 import { ConfigStore } from './services/config.js';
 import { createSessionsAPI, type SessionsAPI } from './sessions.js';
+import { createProfileAPI } from './adapters/profile.js';
 import { ownedScope, type ResourceOwner } from './lifecycle.js';
 // DshLoaderHostAPI construction (design.md §4.1 / §4.4).
 //
@@ -110,6 +111,7 @@ export function createHostAPI(opts: {
     config: opts.configStore ?? new ConfigStore(undefined),
     settings,
     web,
+    profile: createProfileAPI(ctx),
     services,
     patch,
     registry,

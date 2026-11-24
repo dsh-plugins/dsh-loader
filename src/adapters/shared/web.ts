@@ -7,6 +7,7 @@
 // service supports it.
 import { LOG_PREFIX } from '../../version.js';
 import type { CordisContext, WebAPI } from '../../types.js';
+import { ownerRoute } from '../http-access.js';
 
 export class DshLoaderWebError extends Error {
   constructor(message: string) {
@@ -48,6 +49,10 @@ export function createWebAPI(opts: { ctx: CordisContext }): WebAPI {
     exact(path, handler) {
       const web = server();
       return web.register({ kind: 'exact', path, handler }) ?? (() => {});
+    },
+    registerOwner(route) {
+      const web = server();
+      return web.register(ownerRoute(() => ctx.get('connection'), route));
     },
     get(path, handler) {
       return route('GET', path, handler);

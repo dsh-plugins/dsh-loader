@@ -1,5 +1,5 @@
 import type { ComponentType, ReactNode } from 'react';
-import { createSessionAdapter, type SessionClientContext } from './adapters/session-client.js';
+import { cordisRoot, createSessionAdapter, type SessionClientContext } from './adapters/session-client.js';
 
 /** 可观察的官方会话状态，供扩展订阅运行状态与草稿变化。 */
 export interface SessionObservable<T> {
@@ -72,7 +72,7 @@ export function createSessionClient(ctx: SessionClientContext): SessionClient {
 
 /** 在官方 Chat apply 的上下文中安装接口，使原始 child-slot 授权随注册保留。 */
 export function installSessionClient(ctx: SessionClientContext): SessionClient {
-  const root = ctx.root ?? ctx;
+  const root = ctx[cordisRoot] ?? ctx;
   const existing = root.get(SESSION_CLIENT_SERVICE) as SessionClient | undefined;
   if (existing) {
     return existing;
@@ -88,7 +88,7 @@ export function installSessionClient(ctx: SessionClientContext): SessionClient {
 
 /** 从当前 Cordis 根上下文取得已安装的会话扩展接口。 */
 export function getSessionClient(ctx: SessionClientContext): SessionClient | undefined {
-  return (ctx.root ?? ctx).get(SESSION_CLIENT_SERVICE) as SessionClient | undefined;
+  return (ctx[cordisRoot] ?? ctx).get(SESSION_CLIENT_SERVICE) as SessionClient | undefined;
 }
 
 /** 在模块工厂返回官方 Chat 插件时包装其公开 apply，保证安装顺序。 */

@@ -93,6 +93,8 @@ export interface HostAPI {
   readonly sessions: import('./sessions.js').SessionsAPI;
   settings: SettingsAPI;
   web: WebAPI;
+  /** 当前 Web profile 的插件仓库配置与共用文件写锁。 */
+  profile: import('./adapters/profile.js').ProfileAPI;
   services: ServicesAPI;
   /** Monkey-patch protocol: RAW original, identity-checked restore, re-apply safe. */
   patch: import('./patch.js').PatchAPI;
@@ -185,6 +187,8 @@ export interface WebAPI {
    * dsh-network-settings' `/_dsh/.../settings` and `/_dsh/.../probe` routes use.
    */
   exact(path: string, handler: any): () => void;
+  /** 要求已认证的属主请求，返回取消注册的方法。 */
+  registerOwner(route: import('./adapters/http-access.js').OwnerRoute): () => void;
   get(path: string, handler: any): () => void;
   post(path: string, handler: any): () => void;
   put(path: string, handler: any): () => void;
