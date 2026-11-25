@@ -1,8 +1,31 @@
+import { readFileSync, realpathSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { RegistryModules } from '../services/registry.js';
-export async function preloadRegistryModules(importModule: (specifier: string) => Promise<unknown> = specifier => import(specifier)): Promise<RegistryModules> {
-  const load = async (specifier: string): Promise<Record<string, unknown> | undefined> => {
+
+const typertSpecifier = '@deepseek-ai/dsh-typert-protocol';
+
+/** 从 CLI 的实际安装解析 Typert，避免 profile 中的副本使用另一套 Cordis。 */
+function hostTypertUrl(version: string | undefined): URL | undefined {
+  if (!version || !process.argv[1]) return;
+  try {
+    const manifest = join(dirname(dirname(realpathSync(process.argv[1]))), 'package.json');
+    const installed = JSON.parse(readFileSync(manifest, 'utf8')) as { name?: string; version?: string };
+    if (installed.name !== '@deepseek-ai/dsh' || installed.version !== version) return;
+    return pathToFileURL(createRequire(manifest).resolve(typertSpecifier));
+  } catch {
+    return undefined;
+  }
+}
+
+export async function preloadRegistryModules(
+  importModule: (specifier: string) => Promise<unknown> = specifier => import(specifier),
+  version?: string,
+): Promise<RegistryModules> {
+  const load = async (specifier: string, loadModule = importModule): Promise<Record<string, unknown> | undefined> => {
     try {
-      return (await importModule(specifier)) as Record<string, unknown>;
+      return (await loadModule(specifier)) as Record<string, unknown>;
     } catch {
       return undefined;
     }
@@ -26,6 +49,7 @@ export async function preloadRegistryModules(importModule: (specifier: string) =
   const pwshLocalSpecifier = '@deepseek-ai/dsh-pwsh-local';
   const bashLocalSpecifier = '@deepseek-ai/dsh-bash-local';
   const subprocessSpecifier = '@deepseek-ai/dsh-subprocess';
+  const typertUrl = hostTypertUrl(version);
   const [
     sandbox,
     permissionPresets,
@@ -43,6 +67,7 @@ export async function preloadRegistryModules(importModule: (specifier: string) =
     pwshLocal,
     bashLocal,
     subprocess,
+    typert,
   ] = await Promise.all([
     load(sandboxSpecifier),
     load(permissionPresetsSpecifier),
@@ -60,6 +85,7 @@ export async function preloadRegistryModules(importModule: (specifier: string) =
     load(pwshLocalSpecifier),
     load(bashLocalSpecifier),
     load(subprocessSpecifier),
+    typertUrl ? load(typertUrl.href, specifier => import(specifier)) : load(typertSpecifier),
   ]);
   return {
     agent,
@@ -68,6 +94,7 @@ export async function preloadRegistryModules(importModule: (specifier: string) =
     settings: settings as RegistryModules['settings'],
     llm: llm as RegistryModules['llm'],
     tools: tools as RegistryModules['tools'],
+    typert: typert as RegistryModules['typert'],
     toolPipeline: toolPipeline as RegistryModules['toolPipeline'],
     timeout: timeout as RegistryModules['timeout'],
     credentials: credentials as RegistryModules['credentials'],

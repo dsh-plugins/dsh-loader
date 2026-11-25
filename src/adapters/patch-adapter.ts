@@ -29,7 +29,8 @@ export function makePatchAdapter(client: PatchMetadata): AdapterFactory {
           ? { registerProtectedConfigRoute: registerNativeProtectedConfigRoute(ctx) }
           : { authorizeConfig: browserAccess(ctx) }),
         async apply() {
-          adapter.modules = await preloadRegistryModules(ctx.get('loader')?.import?.bind(ctx.get('loader')));
+          const loader = ctx.get('loader');
+          adapter.modules = await preloadRegistryModules(loader?.import?.bind(loader), config?.boot?.dshVersion);
           if (config?.boot) resources.add(installStableRuntime({ version: config.boot.dshVersion, adapterId: client.id, modules: { ...adapter.modules } }));
           adapter.web = createAdaptedWebAPI(ctx, resources);
           adapter.settings = createSettingsAPI({ ctx, resources, exposeAllNamespaces: Boolean(config?.exposeAllNamespaces), module: adapter.modules.settings });

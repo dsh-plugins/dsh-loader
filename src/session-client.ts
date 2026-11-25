@@ -70,9 +70,13 @@ export function createSessionClient(ctx: SessionClientContext): SessionClient {
   return createSessionAdapter(ctx);
 }
 
+function sessionRoot(ctx: SessionClientContext): SessionClientContext {
+  return ctx[cordisRoot] ?? ctx.root ?? ctx;
+}
+
 /** 在官方 Chat apply 的上下文中安装接口，使原始 child-slot 授权随注册保留。 */
 export function installSessionClient(ctx: SessionClientContext): SessionClient {
-  const root = ctx[cordisRoot] ?? ctx;
+  const root = sessionRoot(ctx);
   const existing = root.get(SESSION_CLIENT_SERVICE) as SessionClient | undefined;
   if (existing) {
     return existing;
@@ -88,7 +92,7 @@ export function installSessionClient(ctx: SessionClientContext): SessionClient {
 
 /** 从当前 Cordis 根上下文取得已安装的会话扩展接口。 */
 export function getSessionClient(ctx: SessionClientContext): SessionClient | undefined {
-  return (ctx[cordisRoot] ?? ctx).get(SESSION_CLIENT_SERVICE) as SessionClient | undefined;
+  return sessionRoot(ctx).get(SESSION_CLIENT_SERVICE) as SessionClient | undefined;
 }
 
 /** 在模块工厂返回官方 Chat 插件时包装其公开 apply，保证安装顺序。 */

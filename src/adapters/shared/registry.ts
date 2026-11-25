@@ -95,6 +95,7 @@ export interface RegistryModules {
   llm?: import('./llm.js').LlmModule;
   /** `@deepseek-ai/dsh-tools` — `defineTool` / `ToolArgsError` are module-level. */
   tools?: import('./dsh-symbols.js').DshSymbolModules['tools'];
+  typert?: import('./dsh-symbols.js').DshSymbolModules['typert'];
   toolPipeline?: import('./dsh-symbols.js').DshSymbolModules['toolPipeline'];
   /** `@deepseek-ai/dsh-timeout` — `deadline` / `MAX_TIMER_DELAY_MS`. */
   timeout?: { deadline?: unknown; MAX_TIMER_DELAY_MS?: number };

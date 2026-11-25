@@ -28,6 +28,7 @@ export const NODE_MAX_TIMER_DELAY_MS = 2147483647;
 /** The raw modules this facade forwards to, as resolved at boot. */
 export interface DshSymbolModules {
   tools?: { defineTool?: unknown; ToolArgsError?: unknown; projectToolSchema?: unknown; ToolContextUnavailableError?: unknown };
+  typert?: { TypertRemoteService?: unknown; Remote?: unknown };
   toolPipeline?: { ToolExecutionPipeline?: unknown; executeToolBatch?: unknown };
   timeout?: { deadline?: unknown; MAX_TIMER_DELAY_MS?: number };
   credentials?: { credentialRef?: unknown };
@@ -45,7 +46,18 @@ export interface DshSymbolModules {
  * internal shapes here would defeat the shim's purpose, exactly as
  * `src/types.ts` explains for the service surfaces.
  */
+/** 宿主远程调用绑定的上下文。 */
+export interface RemoteServiceContext {
+  readonly invocation?: { readonly signal: AbortSignal } | undefined;
+}
+
 export interface DshSymbolsAPI {
+  typert: {
+    /** 使用当前宿主的远程服务基类，方法执行时可通过 ctx 读取调用上下文。 */
+    readonly TypertRemoteService: new (ctx: object, key: string) => { readonly ctx: RemoteServiceContext };
+    /** 使用宿主的标记机制公开指定的直接调用方法。 */
+    exposeDirectMethods(service: object, methods: readonly string[]): void;
+  };
   agentInstructions: {
     /** 使用宿主规则文件渲染器，保留来源路径、优先级说明与字节预算。 */
     renderAgentInstructions(files: { absolutePath: string; displayPath: string; content: string }[], options: { maxBytes: number }): { text: string };
@@ -117,6 +129,31 @@ function required<T>(value: unknown, pkg: string, symbol: string): T {
 export function createDshSymbolsAPI(opts: { modules?: DshSymbolModules }): DshSymbolsAPI {
   const m = opts.modules ?? {};
   return {
+    typert: {
+      get TypertRemoteService() {
+        return required<DshSymbolsAPI['typert']['TypertRemoteService']>(
+          m.typert?.TypertRemoteService, '@deepseek-ai/dsh-typert-protocol', 'typert.TypertRemoteService',
+        );
+      },
+      exposeDirectMethods(service, methods) {
+        type DirectMarker = (method: unknown, context: {
+          kind: 'method'; name: string; private: false; static: false;
+          addInitializer(initializer: (this: object) => void): void;
+        }) => void;
+        const mark = required<DirectMarker>(m.typert?.Remote, '@deepseek-ai/dsh-typert-protocol', 'typert.Remote');
+        const prototype = Object.getPrototypeOf(service) as object;
+        for (const name of methods) {
+          const method = Object.getOwnPropertyDescriptor(prototype, name)?.value;
+          if (typeof method !== 'function') {
+            throw new TypeError(`${LOG_PREFIX}: Typert 远程方法不存在：${name}`);
+          }
+          mark(method, {
+            kind: 'method', name, private: false, static: false,
+            addInitializer(initializer) { initializer.call(service); },
+          });
+        }
+      },
+    },
     agentInstructions: {
       renderAgentInstructions(files, options) {
         const render = required<(files: unknown[], options: { maxBytes: number }) => { text: string }>(
