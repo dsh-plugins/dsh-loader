@@ -79,6 +79,7 @@
   },
   "files": [
     "dist",
+    "dsh_pack/",
     "src/stable",
     "bin",
     "lib/client.js",

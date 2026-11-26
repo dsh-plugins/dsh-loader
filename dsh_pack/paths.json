@@ -1,0 +1,11 @@
+{
+  "name": {
+    "en": "Plugin market version preference",
+    "zh-CN": "插件市场版本偏好"
+  },
+  "desc": {
+    "en": "Saves whether the plugin market prefers the newer compatible version from npm latest and next.",
+    "zh-CN": "保存插件市场是否优先选用 npm latest 和 next 中较新的兼容版本。"
+  },
+  "paths": ["profiles/<profile>/config/dsh-loader/config.json"]
+}
